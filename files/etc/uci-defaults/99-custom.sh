@@ -252,6 +252,13 @@ fi
 
 # ============= Docker 防火墙规则 =============
 if command -v dockerd >/dev/null 2>&1; then
+    echo "Docker detected, loading kernel modules..." >>$LOGFILE
+    modprobe br-netfilter 2>/dev/null && echo "br-netfilter loaded" >>$LOGFILE
+    modprobe veth 2>/dev/null && echo "veth loaded" >>$LOGFILE
+    sysctl -w net.bridge.bridge-nf-call-iptables=1 >>$LOGFILE 2>&1
+    grep -q 'bridge-nf-call-iptables' /etc/sysctl.conf 2>/dev/null || \
+        echo 'net.bridge.bridge-nf-call-iptables=1' >> /etc/sysctl.conf
+
     echo "Docker detected, configuring firewall rules..." >>$LOGFILE
     FW_FILE="/etc/config/firewall"
 

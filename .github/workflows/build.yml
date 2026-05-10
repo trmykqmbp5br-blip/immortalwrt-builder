@@ -35,6 +35,11 @@ on:
       pppoe_wanb_password:
         description: 'PPPoE WANB password (second line)'
         required: false
+      enable_store:
+        description: 'Include iStore app store (third-party packages)'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -122,6 +127,14 @@ jobs:
 
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
+
+    - name: Enable Store integration
+      if: github.event.inputs.enable_store == 'true'
+      run: |
+        if ! grep -q 'luci-app-store' shell/custom-packages.sh 2>/dev/null; then
+          echo 'CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"' >> shell/custom-packages.sh
+          echo "istore enabled"
+        fi
 
     - name: Load custom configuration
       env:

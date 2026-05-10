@@ -38,11 +38,17 @@ chmod +x flash.sh
 
 ### 刷机与还原
 
-刷机后恢复配置备份：
+刷机后**手动**恢复配置备份：
 
 ```bash
-sysupgrade -r immortalwrt-backup-20260510-with-pkgs.tar.gz
+# 1. 上传备份到路由器
+scp -i id_ed25519_claude immortalwrt-backup-*-with-pkgs.tar.gz root@192.168.100.1:/tmp/
+
+# 2. 恢复备份（自动重新安装已记录的软件包）
+ssh -i id_ed25519_claude root@192.168.100.1 'sysupgrade -r /tmp/immortalwrt-backup-*-with-pkgs.tar.gz'
 ```
+
+flash.sh 脚本仅负责构建+刷写，不处理备份，备份由用户手动管理。
 
 ## 构建参数说明
 

@@ -1,7 +1,12 @@
 #!/bin/bash
-# diy-part1.sh - Custom feeds (runs before feeds update/install)
+# diy-part1.sh - 自定义软件源 (在 feeds update/install 前运行)
 
-# 当前包选择无需第三方 feeds，所有包均来自 ImmortalWrt 官方源。
-# 如需 PassWall / OpenClash 等第三方包，取消下面的注释：
-# echo "src-git kenzo https://github.com/kenzok8/openwrt-packages.git;master" >> feeds.conf.default
-# echo "src-git small https://github.com/kenzok8/small.git;master" >> feeds.conf.default
+# ============= 第三方 feeds =============
+# kenzo: PassWall, SSR-Plus, OpenClash, MosDNS, TurboACC 等
+echo "src-git kenzo https://github.com/kenzok8/openwrt-packages.git;master" >> feeds.conf.default
+
+# small: 依赖包 (xray-core, sing-box, hysteria 等)
+echo "src-git small https://github.com/kenzok8/small.git;master" >> feeds.conf.default
+
+# sirpdboy: 高级设置、分区扩容、酷猫主题等
+# echo "src-git sirpdboy https://github.com/sirpdboy/sirpdboy-package.git;main" >> feeds.conf.default
