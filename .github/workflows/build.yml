@@ -46,7 +46,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
     - name: Checkout
@@ -72,6 +72,16 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Cache ccache and dl
+      uses: actions/cache@v4
+      with:
+        path: |
+          /workdir/openwrt/dl
+          ~/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-${{ env.REPO_BRANCH }}-
 
     - name: Load custom feeds
       run: |
