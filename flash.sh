@@ -66,13 +66,19 @@ check_prereqs() {
     fi
     info "路由器连接正常 ($ROUTER_IP)"
 
-    # 查找备份文件
-    BACKUP_FILE=$(ls immortalwrt-backup-*.tar.gz 2>/dev/null | tail -1 || true)
-    if [ -z "$BACKUP_FILE" ]; then
-        warn "未找到本地备份文件，将在路由器上创建新备份"
+    echo ""
+    echo -n "是否在路由器上创建新备份？（包含所有配置+已安装软件列表）[Y/n]: "
+    read -r MAKE_BACKUP
+    if [ "$MAKE_BACKUP" != "n" ] && [ "$MAKE_BACKUP" != "N" ]; then
         CREATE_BACKUP=true
     else
-        info "使用备份文件: $BACKUP_FILE"
+        # 查找本地已有的备份
+        BACKUP_FILE=$(ls immortalwrt-backup-*-with-pkgs.tar.gz 2>/dev/null | tail -1 || true)
+        if [ -n "$BACKUP_FILE" ]; then
+            info "使用本地备份: $BACKUP_FILE"
+        else
+            warn "未找到本地备份，将跳过配置恢复"
+        fi
         CREATE_BACKUP=false
     fi
 
@@ -164,16 +170,23 @@ download_firmware() {
 
 # ============= 在路由器上创建新备份 =============
 create_backup_on_router() {
-    echo "====================== 在路由器上创建备份 ======================"
+    echo "====================== 在路由器上创建备份（含包列表） ======================"
 
-    local backup_name="immortalwrt-backup-$(date +%Y%m%d).tar.gz"
+    local backup_name="immortalwrt-backup-$(date +%Y%m%d)-with-pkgs.tar.gz"
 
     ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "root@$ROUTER_IP" \
-        "sysupgrade -b -k /tmp/$backup_name" 2>&1
+        "sysupgrade -b /tmp/$backup_name -k" 2>&1
 
     # 下载备份到本地
     scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
         "root@$ROUTER_IP:/tmp/$backup_name" "./$backup_name" 2>&1
+
+    # 验证备份包含包列表
+    if tar tzf "$backup_name" 2>/dev/null | grep -q 'installed_packages.txt'; then
+        info "备份包含包列表，刷写后可自动恢复所有软件"
+    else
+        warn "备份未包含包列表，刷写后需手动安装软件"
+    fi
 
     BACKUP_FILE="$backup_name"
     info "备份已创建: $BACKUP_FILE ($(ls -lh $BACKUP_FILE | awk '{print $5}'))"
