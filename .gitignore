@@ -1,0 +1,4 @@
+id_ed25519_claude
+*.img.gz
+*.tar.gz
+firmware-download/

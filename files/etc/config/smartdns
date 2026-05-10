@@ -1,0 +1,112 @@
+config smartdns
+	option enabled '1'
+	option port '5335'
+	option tcp_server '1'
+	option ipv6_server '1'
+	option dualstack_ip_selection '1'
+	option speed_check_mode 'tcp:443,ping'
+	option cache_size '40960'
+	option prefetch_domain '1'
+	option rr_ttl_min '300'
+	option rr_ttl_max '86400'
+	option serve_expired '1'
+	option response_mode 'fastest-response'
+	option auto_set_dnsmasq '1'
+	option ui '1'
+	option ui_port '5336'
+	list conf_files 'adblock.conf'
+	list conf_files 'adblock_auto.conf'
+	option enable_auto_update '1'
+	option auto_update_day_time '5'
+	option auto_update_week_time '*'
+	option tls_server '1'
+	option tls_server_port '853'
+	option doh_server '1'
+	option doh_server_port '843'
+	option bind_device '1'
+	option cache_persist '1'
+	option resolve_local_hostnames '1'
+	option force_https_soa '0'
+	option seconddns_port '6553'
+	option seconddns_tcp_server '1'
+	option log_output_mode 'file'
+	option old_port '5335'
+	option old_enabled '1'
+	option old_auto_set_dnsmasq '1'
+
+config client-rule
+	option enabled '0'
+	option dualstack_ip_selection '1'
+	option force_https_soa '1'
+
+config server
+	option enabled '1'
+	option name 'AliDNS-DoT'
+	option ip '223.5.5.5'
+	option type 'tls'
+	option port '853'
+	option no_check_certificate '0'
+
+config server
+	option enabled '1'
+	option name 'AliDNS-DoH'
+	option ip 'https://dns.alidns.com/dns-query'
+	option type 'https'
+	option no_check_certificate '0'
+
+config server
+	option enabled '1'
+	option name 'DNSPod-DoT'
+	option ip '119.29.29.29'
+	option type 'tls'
+	option port '853'
+	option no_check_certificate '0'
+
+config server
+	option enabled '1'
+	option name 'DNSPod-DoH'
+	option ip 'https://dns.pub/dns-query'
+	option type 'https'
+	option no_check_certificate '0'
+
+config server
+	option enabled '1'
+	option name 'AliDNS-UDP'
+	option ip '223.5.5.5'
+	option type 'udp'
+	option port '53'
+
+config server
+	option enabled '1'
+	option name 'DNSPod-UDP'
+	option ip '119.29.29.29'
+	option type 'udp'
+	option port '53'
+
+config server
+	option enabled '1'
+	option name 'AliDNS-IPv6'
+	option ip '2400:3200::1'
+	option type 'udp'
+	option port '53'
+
+config server
+	option enabled '1'
+	option name 'Cloudflare-DoT'
+	option ip '1.1.1.1'
+	option type 'tls'
+	option port '853'
+	option no_check_certificate '0'
+
+config server
+	option enabled '0'
+	option name '114DNS'
+	option ip '114.114.114.114'
+	option type 'udp'
+	option port '53'
+
+config download-file
+	option url 'https://gcore.jsdelivr.net/gh/217heidai/adblockfilters@main/rules/adblocksmartdnslite.conf'
+	option name 'adblock.conf'
+	option type 'config'
+	option enabled '1'
