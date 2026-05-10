@@ -21,7 +21,7 @@ cd "$SCRIPT_DIR"
 
 ROUTER_IP="192.168.100.1"
 SSH_KEY="./id_ed25519_claude"
-GITHUB_REPO="trmykqmbp5br-blip/immortalwrt-builder"  # 改为你的实际仓库名
+GITHUB_REPO="trmykqmbp5br-blip/immortalwrt-builder"
 
 # ============= 颜色定义 =============
 RED='\033[0;31m'
