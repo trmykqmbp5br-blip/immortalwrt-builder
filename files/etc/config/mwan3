@@ -8,7 +8,6 @@ config interface 'wan'
 	list track_ip '223.5.5.5'
 	list track_ip '119.29.29.29'
 	option flush_conntrack 'disconnected'
-	option gateway '10.22.128.1'
 
 config interface 'wanb'
 	option enabled '1'

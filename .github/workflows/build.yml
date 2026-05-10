@@ -6,7 +6,7 @@ on:
       rootfs_size:
         description: 'Rootfs size (MB)'
         required: true
-        default: '1024'
+        default: '4096'
       include_docker:
         description: 'Include Docker'
         required: true
@@ -23,11 +23,17 @@ on:
         options:
           - 'yes'
           - 'no'
-      pppoe_account:
-        description: 'PPPoE account'
+      pppoe_wan_account:
+        description: 'PPPoE WAN account'
         required: false
-      pppoe_password:
-        description: 'PPPoE password'
+      pppoe_wan_password:
+        description: 'PPPoE WAN password'
+        required: false
+      pppoe_wanb_account:
+        description: 'PPPoE WANB account (second line)'
+        required: false
+      pppoe_wanb_password:
+        description: 'PPPoE WANB password (second line)'
         required: false
 
 permissions:
@@ -50,7 +56,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@main
+      uses: actions/checkout@v4
 
     - name: Initialization environment
       env:
@@ -79,9 +85,30 @@ jobs:
         path: |
           /workdir/openwrt/dl
           ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
         restore-keys: |
           ccache-${{ env.REPO_BRANCH }}-
+
+    - name: Generate PPPoE settings
+      if: github.event.inputs.enable_pppoe == 'yes'
+      run: |
+        mkdir -p files/etc/config
+        cat > files/etc/config/pppoe-settings << 'PPEOF'
+        enable_pppoe="yes"
+        PPPOE_WAN_ACCOUNT
+        PPPOE_WAN_PASSWORD
+        PPPOE_WANB_ACCOUNT
+        PPPOE_WANB_PASSWORD
+        PPEOF
+        sed -i "s|PPPOE_WAN_ACCOUNT|pppoe_wan_account=\"${{ github.event.inputs.pppoe_wan_account }}\"|" files/etc/config/pppoe-settings
+        sed -i "s|PPPOE_WAN_PASSWORD|pppoe_wan_password=\"${{ github.event.inputs.pppoe_wan_password }}\"|" files/etc/config/pppoe-settings
+        sed -i "s|PPPOE_WANB_ACCOUNT|pppoe_wanb_account=\"${{ github.event.inputs.pppoe_wanb_account }}\"|" files/etc/config/pppoe-settings
+        sed -i "s|PPPOE_WANB_PASSWORD|pppoe_wanb_password=\"${{ github.event.inputs.pppoe_wanb_password }}\"|" files/etc/config/pppoe-settings
+        echo "PPPoE settings file generated"
+        # WARNING: Credentials may appear in workflow logs.
+        # Consider using GitHub Secrets for production use:
+        #   secrets.PPPOE_WAN_ACCOUNT / secrets.PPPOE_WAN_PASSWORD
+        #   secrets.PPPOE_WANB_ACCOUNT / secrets.PPPOE_WANB_PASSWORD
 
     - name: Load custom feeds
       run: |
@@ -97,6 +124,9 @@ jobs:
       run: cd openwrt && ./scripts/feeds install -a
 
     - name: Load custom configuration
+      env:
+        INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
+        ROOTFS_SIZE: ${{ github.event.inputs.rootfs_size }}
       run: |
         [ -e files ] && mv files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
@@ -118,7 +148,7 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
@@ -138,7 +168,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@master
+      uses: softprops/action-gh-release@v2
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,7 +178,7 @@ jobs:
         files: ${{ env.FIRMWARE }}/*
 
     - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@master
+      uses: dev-drprasad/delete-older-releases@v1
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         keep_latest: 3
@@ -157,7 +187,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@main
+      uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 0
         keep_minimum_runs: 2

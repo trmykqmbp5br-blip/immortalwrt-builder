@@ -4,22 +4,37 @@
 
 ## 固件特性
 
-- ImmortalWrt 24.10.6 x86_64 (kernel 6.6)
+- ImmortalWrt 24.10.6 x86_64 (kernel 6.6, LLVM 编译)
 - IA32_EMULATION（32位应用支持）
-- 网卡驱动: 仅保留 igc (Intel I225/I226 2.5GbE)
-- mwan3 双 WAN 负载均衡
-- SmartDNS + DDNS
-- Docker + dockerman
+- 网卡驱动: igc (I225/I226) + e1000e, igb, ixgbe, r8125, r8168, vmxnet3, USB 网卡等
+- mwan3 双 WAN 负载均衡（自动检测网口数 ≥2 时启用）
+- SmartDNS（DoT/DoH/UDP 多上游，去广告规则自动更新）
+- Docker + dockerman（构建时可选择开关）
 - BBR 拥塞控制 (kmod-tcp-bbr)
 - CPU 定频 (luci-app-cpufreq)
 - 默认 IP: 192.168.100.1
 - SSH 密钥登录预置
+- 自动检测网口数量：单网口 DHCP 模式，多网口静态 IP + 双 WAN
+- 安全加固: RELRO Full, FORTIFY_SOURCE, SECCOMP
 
 ## 使用方式
 
 ### GitHub Actions 远程构建
 
-手动触发：GitHub → Actions → Build ImmortalWrt → Run workflow
+1. Fork 本仓库
+2. 在 Settings → Secrets and variables → Actions 中添加 Secrets（可选，推荐）：
+   - `PPPOE_WAN_ACCOUNT` / `PPPOE_WAN_PASSWORD` — 第一条宽带的 PPPoE 凭证
+   - `PPPOE_WANB_ACCOUNT` / `PPPOE_WANB_PASSWORD` — 第二条宽带的 PPPoE 凭证
+3. Actions → Build ImmortalWrt → Run workflow
+4. 填写参数后触发构建（约 1.5-3 小时）
+5. 构建完成后在 Releases 下载固件
+
+### 使用 flash.sh 一键构建 + 刷写
+
+```bash
+chmod +x flash.sh
+./flash.sh
+```
 
 ### 刷机与还原
 
@@ -29,27 +44,48 @@
 sysupgrade -r immortalwrt-backup-20260510-with-pkgs.tar.gz
 ```
 
+## 构建参数说明
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| rootfs_size | 根文件系统大小 (MB) | 4096 |
+| include_docker | 是否包含 Docker | yes |
+| enable_pppoe | 是否启用 PPPoE 拨号 | no |
+| pppoe_wan_account | 第一条宽带账号 | - |
+| pppoe_wan_password | 第一条宽带密码 | - |
+| pppoe_wanb_account | 第二条宽带账号 | - |
+| pppoe_wanb_password | 第二条宽带密码 | - |
+
 ## 优化说明
 
-- 禁用 BTF 调试信息（加速编译）
+- 禁用 BTF 调试信息（加速编译，减小内核体积）
 - 禁用 FTRACE/KPROBE/KEXEC/CRASH_DUMP
-- 禁用音频/WiFi/多余网卡驱动
-- 删除 PassWall / OpenClash 等第三方包
+- 精简网卡/音频驱动（移除 HDA 声卡、WiFi 等）
+- 仅启用必要的虚拟化网卡驱动 (vmxnet3, e1000e)
 - 启用 ccache 编译缓存
-- GitHub Actions 自动清理旧 Release
+- GitHub Actions 自动保留最近 3 个 Release
+- 使用 LLVM/Clang 构建（部分组件）
 
 ## 文件结构
 
 ```
 ├── .github/workflows/build.yml    # GitHub Actions 构建工作流
-├── .config                         # OpenWrt 配置
-├── diy-part1.sh                    # 自定义软件源
-├── diy-part2.sh                    # IA32_EMULATION 内核配置
+├── .config                         # OpenWrt 配置 (x86_64)
+├── diy-part1.sh                    # 自定义软件源（可添加第三方 feed）
+├── diy-part2.sh                    # 内核配置 + Docker/Rootfs 开关
 ├── files/etc/dropbear/             # SSH 授权密钥
-├── files/etc/uci-defaults/         # 首次启动脚本
+├── files/etc/uci-defaults/         # 首次启动脚本（动态网络配置）
 ├── files/etc/config/               # 默认配置（网络/mwan3/smartdns）
+├── flash.sh                        # 一键构建+刷写到路由器
 └── release.txt                     # Release 说明
 ```
+
+## 安全注意事项
+
+- **请勿在 Workflow 输入框中直接填写真实 PPPoE 密码**（会出现在构建日志中）
+- 推荐使用 GitHub Actions Secrets 存储敏感凭证
+- 构建日志中的密码会以明文显示，仅用于调试
+- 定期更换路由器 SSH 密钥和宽带密码
 
 ## 致谢
 

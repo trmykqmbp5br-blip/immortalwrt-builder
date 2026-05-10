@@ -23,6 +23,9 @@ ROUTER_IP="192.168.100.1"
 SSH_KEY="./id_ed25519_claude"
 GITHUB_REPO="trmykqmbp5br-blip/immortalwrt-builder"
 
+# SSH 选项：首次连接自动接受主机密钥，后续连接验证
+SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=5"
+
 # ============= 颜色定义 =============
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -59,8 +62,7 @@ check_prereqs() {
     info "SSH 密钥就绪"
 
     # SSH connectivity
-    if ! ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-         "root@$ROUTER_IP" "echo alive" &>/dev/null; then
+    if ! ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" "echo alive" &>/dev/null; then
         error "无法连接到路由器 $ROUTER_IP"
         exit 1
     fi
@@ -72,7 +74,6 @@ check_prereqs() {
     if [ "$MAKE_BACKUP" != "n" ] && [ "$MAKE_BACKUP" != "N" ]; then
         CREATE_BACKUP=true
     else
-        # 查找本地已有的备份
         BACKUP_FILE=$(ls immortalwrt-backup-*-with-pkgs.tar.gz 2>/dev/null | tail -1 || true)
         if [ -n "$BACKUP_FILE" ]; then
             info "使用本地备份: $BACKUP_FILE"
@@ -96,17 +97,27 @@ check_prereqs() {
 trigger_build() {
     echo "====================== 触发 GitHub Actions 构建 ======================"
 
-    local ROOTFS_SIZE="${1:-1024}"
+    local ROOTFS_SIZE="${1:-4096}"
     local DOCKER="${2:-yes}"
 
     echo "参数: rootfs_size=$ROOTFS_SIZE MB, docker=$DOCKER"
+
+    # 如果提供了 PPPoE 凭证，一并传递
+    local pppoe_args=""
+    if [ -n "${PPPOE_WAN_ACCOUNT:-}" ] && [ -n "${PPPOE_WAN_PASSWORD:-}" ]; then
+        pppoe_args="-f enable_pppoe=yes -f pppoe_wan_account=$PPPOE_WAN_ACCOUNT -f pppoe_wan_password=$PPPOE_WAN_PASSWORD"
+        [ -n "${PPPOE_WANB_ACCOUNT:-}" ] && pppoe_args="$pppoe_args -f pppoe_wanb_account=$PPPOE_WANB_ACCOUNT"
+        [ -n "${PPPOE_WANB_PASSWORD:-}" ] && pppoe_args="$pppoe_args -f pppoe_wanb_password=$PPPOE_WANB_PASSWORD"
+    else
+        pppoe_args="-f enable_pppoe=no"
+    fi
 
     # 触发 workflow
     gh workflow run build.yml \
         -R "$GITHUB_REPO" \
         -f rootfs_size="$ROOTFS_SIZE" \
         -f include_docker="$DOCKER" \
-        -f enable_pppoe="no" \
+        $pppoe_args \
         --ref main 2>&1 || {
         error "触发构建失败，请检查仓库名和 workflow 名称"
         exit 1
@@ -174,11 +185,11 @@ create_backup_on_router() {
 
     local backup_name="immortalwrt-backup-$(date +%Y%m%d)-with-pkgs.tar.gz"
 
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "root@$ROUTER_IP" \
+    ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
         "sysupgrade -b /tmp/$backup_name -k" 2>&1
 
     # 下载备份到本地
-    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+    scp -i "$SSH_KEY" $SSH_OPTS \
         "root@$ROUTER_IP:/tmp/$backup_name" "./$backup_name" 2>&1
 
     # 验证备份包含包列表
@@ -201,14 +212,12 @@ flash_router() {
     local remote_fw="/tmp/$fw_name"
 
     # 上传固件
-    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-        "$firmware" "root@$ROUTER_IP:$remote_fw" 2>&1
+    scp -i "$SSH_KEY" $SSH_OPTS "$firmware" "root@$ROUTER_IP:$remote_fw" 2>&1
     info "固件已上传到路由器"
 
     # 上传备份
     if [ -n "$BACKUP_FILE" ] && [ -f "$BACKUP_FILE" ]; then
-        scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-            "$BACKUP_FILE" "root@$ROUTER_IP:/tmp/backup.tar.gz" 2>&1
+        scp -i "$SSH_KEY" $SSH_OPTS "$BACKUP_FILE" "root@$ROUTER_IP:/tmp/backup.tar.gz" 2>&1
         info "备份文件已上传到路由器"
     else
         warn "未找到备份文件，将不恢复配置"
@@ -216,7 +225,7 @@ flash_router() {
 
     echo ""
     echo "====================== 准备刷写 ======================"
-    echo "⚠️  即将刷写固件！路由器将会重启！"
+    echo "警告: 即将刷写固件！路由器将会重启！"
     echo "   固件: $fw_name"
     echo "   备份: $(basename $BACKUP_FILE 2>/dev/null || echo '无')"
     echo ""
@@ -235,21 +244,20 @@ flash_router() {
     # 解压固件（如果是 .gz）
     local flash_file="$remote_fw"
     if [[ "$firmware" == *.gz ]]; then
-        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "root@$ROUTER_IP" \
+        ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
             "gunzip -f $remote_fw && echo '解压完成'" 2>&1
         flash_file="${remote_fw%.gz}"
     fi
 
     # 执行 sysupgrade 恢复备份并刷写
-    # 使用 -f 指定备份文件（如果有），-n 不保存旧配置
     local restore_flag=""
-    if ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "root@$ROUTER_IP" \
+    if ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
             "[ -f /tmp/backup.tar.gz ]" 2>/dev/null; then
         restore_flag="-f /tmp/backup.tar.gz"
     fi
 
     echo "执行: sysupgrade $restore_flag $flash_file"
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "root@$ROUTER_IP" \
+    ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
         "sysupgrade $restore_flag $flash_file" 2>&1 || true
 
     echo ""
@@ -267,7 +275,7 @@ main() {
     echo "================================================================"
     echo "   ImmortalWrt 一键构建 + 刷写脚本"
     echo "   版本: 24.10.6 | 内核: 6.6 + IA32_EMULATION"
-    echo "================================================================"
+    echo "================================================================="
     echo ""
 
     check_prereqs
@@ -284,7 +292,7 @@ main() {
 
     case "$MODE" in
         2)
-            ROOTFS="${1:-1024}"
+            ROOTFS="${1:-4096}"
             trigger_build "$ROOTFS"
             info "查看进度: gh run view -R $GITHUB_REPO --web"
             ;;
@@ -304,7 +312,7 @@ main() {
             fi
             ;;
         1|*)
-            ROOTFS="${1:-1024}"
+            ROOTFS="${1:-4096}"
             trigger_build "$ROOTFS"
             wait_build
             download_firmware "$RUN_ID"
