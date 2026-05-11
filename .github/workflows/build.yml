@@ -165,6 +165,7 @@ jobs:
         key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
         restore-keys: |
           dl-${{ env.REPO_BRANCH }}-
+          ccache-${{ env.REPO_BRANCH }}-
 
     - name: Restore ccache
       uses: actions/cache/restore@v5
