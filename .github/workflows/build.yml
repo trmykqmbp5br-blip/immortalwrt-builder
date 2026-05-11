@@ -60,9 +60,6 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
     - name: Maximize build disk space
       uses: easimon/maximize-build-space@master
       with:
@@ -98,6 +95,9 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
+
+    - name: Checkout
+      uses: actions/checkout@v4
 
     - name: Clone source code
       working-directory: /workdir
