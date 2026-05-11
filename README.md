@@ -5,7 +5,7 @@
 ## 固件特性
 
 - ImmortalWrt 24.10.6 x86_64 (kernel 6.6, LLVM 编译)
-- IA32_EMULATION（32位应用支持）
+- IA32_EMULATION（32 位应用支持，musl + glibc 双运行时）
 - 网卡驱动: igc (I225/I226) + e1000e, igb, ixgbe, r8125, r8168, vmxnet3, USB 网卡等
 - mwan3 双 WAN 负载均衡（自动检测网口数 ≥2 时启用）
 - SmartDNS（DoT/DoH/UDP 多上游，去广告规则自动更新）

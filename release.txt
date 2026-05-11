@@ -2,7 +2,7 @@ ImmortalWrt 24.10.6 x86_64 自动构建固件
 
 内核: Linux 6.6 | 架构: x86_64 (Intel/AMD)
 平台: ImmortalWrt 24.10.6 官方源码
-特性: IA32_EMULATION | mwan3 双WAN | SmartDNS | Docker | BBR
+特性: IA32_EMULATION (musl+glibc双运行时) | mwan3 双WAN | SmartDNS | Docker | BBR
 
 默认设置:
  - 管理IP: 192.168.100.1

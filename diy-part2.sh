@@ -20,7 +20,9 @@ fi
 # libc 是固件内置包，不在可下载的 packages 仓库中。
 # 必须从官方 i386 (generic) rootfs 镜像提取 ld-musl-i386.so.1。
 I386_ROOTFS_URL="https://downloads.immortalwrt.org/releases/24.10.6/targets/x86/generic/immortalwrt-24.10.6-x86-generic-generic-ext4-rootfs.img.gz"
-LIBC32_TMP="/tmp/libc32_$$"
+# 注意: 不能用 /tmp（GitHub Actions runner 的 /tmp 是 tmpfs，仅 2-4GB）
+# rootfs 镜像解压后有 ~1.5GB，必须放工作目录
+LIBC32_TMP="${GITHUB_WORKSPACE:-.}/libc32-tmp-$$"
 mkdir -p "$LIBC32_TMP" files/lib
 
 echo "Fetching 32-bit musl runtime from i386 rootfs..."
@@ -43,6 +45,83 @@ else
     echo "WARNING: Could not download i386 rootfs, skipping 32-bit runtime"
 fi
 rm -rf "$LIBC32_TMP"
+
+# ============= 预置 32 位 glibc 运行时 =============
+# 绝大多数预编译的 32 位 Linux 程序链接 glibc（非 musl）。
+# 从 GitHub Actions runner (ubuntu-22.04) 提取 i386 glibc 运行时，
+# libc6-dev-i386 / gcc-multilib 已由环境准备步骤安装。
+echo "Installing 32-bit glibc runtime..."
+
+GLIBC32_DEST="files/lib"
+mkdir -p "$GLIBC32_DEST"
+
+# 定位 runner 上的 32 位库目录
+I386_LIB=""
+for d in /lib/i386-linux-gnu /usr/lib/i386-linux-gnu /usr/lib32 /lib32; do
+    if [ -f "$d/libc.so.6" ] || [ -f "$d/libc.so" ]; then
+        I386_LIB="$d"
+        break
+    fi
+done
+
+copy32() {
+    local src="$1"
+    local dst="$2"
+    [ -f "$src" ] && cp -L "$src" "$dst" && return 0
+    return 1
+}
+
+if [ -z "$I386_LIB" ]; then
+    echo "WARNING: 32-bit glibc not found on runner. Only musl 32-bit supported."
+else
+    echo "Found 32-bit glibc at: $I386_LIB"
+
+    # --- glibc 核心运行时 ---
+    # ld-linux.so.2: 32 位动态链接器（ELF .interp 硬编码此路径）
+    if copy32 "/lib/ld-linux.so.2" "$GLIBC32_DEST/ld-linux.so.2" || \
+       copy32 "$I386_LIB/ld-linux.so.2" "$GLIBC32_DEST/ld-linux.so.2"; then
+        echo "  ld-linux.so.2 OK"
+    else
+        echo "  FAIL: ld-linux.so.2 not found"
+    fi
+
+    # 核心库（几乎所有 32 位程序依赖）
+    for lib in libc.so.6 libpthread.so.0 libm.so.6 libdl.so.2 librt.so.1 libutil.so.1 libresolv.so.2; do
+        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib OK" || echo "  WARNING: $lib missing"
+    done
+
+    # 可选但常见的 NSS 库（DNS/用户查找）
+    for lib in libnss_dns.so.2 libnss_files.so.2; do
+        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib OK" || true
+    done
+
+    # --- GCC 运行时 & C++ 标准库 ---
+    for lib in libgcc_s.so.1 libstdc++.so.6; do
+        if copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/"; then
+            echo "  $lib OK"
+        else
+            # ubuntu-22.04 上 lib32stdc++6 可能放在 /usr/lib/x86_64-linux-gnu/ 下
+            FOUND=$(find /usr/lib /lib -name "$lib" -type f 2>/dev/null | grep -E 'i386|i686|32' | head -1)
+            if [ -n "$FOUND" ]; then
+                cp -L "$FOUND" "$GLIBC32_DEST/"
+                echo "  $lib OK (from $FOUND)"
+            else
+                echo "  WARNING: $lib not found"
+            fi
+        fi
+    done
+
+    # --- zlib（极常用依赖）---
+    copy32 "$I386_LIB/libz.so.1" "$GLIBC32_DEST/" && echo "  libz.so.1 OK" || true
+
+    # --- OpenSSL（网络程序常用）---
+    for lib in libssl.so.3 libcrypto.so.3; do
+        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib OK" || true
+    done
+
+    echo "32-bit glibc runtime files:"
+    ls -la "$GLIBC32_DEST"/ld-linux.so.2 "$GLIBC32_DEST"/libc.so.6 "$GLIBC32_DEST"/libstdc++.so.6 2>/dev/null || true
+fi
 
 # ============= Docker 开关 =============
 if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
