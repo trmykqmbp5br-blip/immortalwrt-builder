@@ -103,16 +103,23 @@ for repo_url in $I386_PKG_REPOS; do
         echo "  Index cached: $repo_name" || true
 done
 
-# 在所有索引中查找 ipk 文件名
+# 在所有索引中查找 ipk，返回完整下载 URL
 find_ipk() {
     local pkg="$1"
-    for idx in "$I386_PKG_CACHE"/*.idx; do
+    for repo_url in $I386_PKG_REPOS; do
+        local repo_name=$(echo "$repo_url" | awk -F/ '{print $(NF-1)"/"$NF}')
+        local idx="$I386_PKG_CACHE/${repo_name//\//_}.idx"
         [ -f "$idx" ] || continue
-        awk -v pkg="$pkg" '
+        local filename=$(awk -v pkg="$pkg" '
             /^Package:/{p=$2} /^Filename:/{f=$2}
             p==pkg && f{print f; exit}
-        ' "$idx"
+        ' "$idx")
+        if [ -n "$filename" ]; then
+            echo "$repo_url/$filename"
+            return 0
+        fi
     done
+    return 1
 }
 
 extract_lib32() {
@@ -129,17 +136,9 @@ extract_lib32() {
         return 0
     fi
 
-    # 2) 从 i386 ipk 下载提取
-    local ipk_path=$(find_ipk "$ipk_pkg")
-    if [ -n "$ipk_path" ]; then
-        # 根据 ipk 路径判断所属 repo
-        local repo_base="https://downloads.immortalwrt.org/releases/24.10.6"
-        local ipk_url
-        case "$ipk_path" in
-            */generic/*) ipk_url="$repo_base/targets/x86/generic/packages/$ipk_path" ;;
-            *)           ipk_url="$repo_base/packages/i386_pentium4/$ipk_path" ;;
-        esac
-
+    # 2) 从 i386 ipk 下载提取（find_ipk 已直接返回完整 URL）
+    local ipk_url=$(find_ipk "$ipk_pkg")
+    if [ -n "$ipk_url" ]; then
         local ipk_file="$I386_PKG_CACHE/${ipk_pkg}.ipk"
         local ipk_dir="$I386_PKG_CACHE/${ipk_pkg}"
         if wget -q --timeout=60 -O "$ipk_file" "$ipk_url" 2>/dev/null; then
