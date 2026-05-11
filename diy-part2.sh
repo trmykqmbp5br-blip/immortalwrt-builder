@@ -4,13 +4,17 @@
 # ============= 启用 IA32_EMULATION（32位应用支持）=============
 KERNEL_CONFIG="target/linux/x86/config-6.6"
 if [ -f "$KERNEL_CONFIG" ]; then
-    if grep -q "CONFIG_IA32_EMULATION=y" "$KERNEL_CONFIG" 2>/dev/null; then
+    if grep -q "^CONFIG_IA32_EMULATION=y$" "$KERNEL_CONFIG" 2>/dev/null; then
         echo "IA32_EMULATION already enabled in kernel config"
+    elif grep -q "^# CONFIG_IA32_EMULATION is not set$" "$KERNEL_CONFIG" 2>/dev/null; then
+        sed -i 's/^# CONFIG_IA32_EMULATION is not set$/CONFIG_IA32_EMULATION=y/' "$KERNEL_CONFIG"
+        echo "IA32_EMULATION uncommented in kernel config"
+    elif grep -q "CONFIG_IA32_EMULATION" "$KERNEL_CONFIG" 2>/dev/null; then
+        sed -i 's/^.*CONFIG_IA32_EMULATION.*$/CONFIG_IA32_EMULATION=y/' "$KERNEL_CONFIG"
+        echo "IA32_EMULATION fixed in kernel config"
     else
-        sed -i 's/.*CONFIG_IA32_EMULATION.*/CONFIG_IA32_EMULATION=y/' "$KERNEL_CONFIG" 2>/dev/null || true
-        grep -q "CONFIG_IA32_EMULATION=y" "$KERNEL_CONFIG" 2>/dev/null || \
-            echo "CONFIG_IA32_EMULATION=y" >> "$KERNEL_CONFIG"
-        echo "IA32_EMULATION enabled in kernel config"
+        echo "CONFIG_IA32_EMULATION=y" >> "$KERNEL_CONFIG"
+        echo "IA32_EMULATION appended to kernel config"
     fi
 else
     echo "WARNING: Kernel config not found at $KERNEL_CONFIG"
@@ -76,24 +80,98 @@ chmod 755 files/lib/ld-musl-i386.so.1
 echo "  ld-musl-i386.so.1 → /lib/"
 
 # Step 5: 提取常用 32 位库 → /lib32/
-LIBS32="
-    lib/libgcc_s.so.1
-    lib/libatomic.so.1
-    usr/lib/libstdc++.so.6
-    usr/lib/libopenssl.so.3
-    usr/lib/libcurl.so.4
-    lib/libz.so.1
+# 优先从已挂载的 rootfs 搜索，缺失的从 i386 软件源下载 ipk 提取
+#
+# i386 包分布在 3 个 repo 目录下:
+#   base/      → libopenssl3, zlib
+#   packages/  → libcurl4
+#   targets/   → libgcc1, libatomic1, libstdcpp6
+I386_PKG_REPOS="
+    https://downloads.immortalwrt.org/releases/24.10.6/packages/i386_pentium4/base
+    https://downloads.immortalwrt.org/releases/24.10.6/packages/i386_pentium4/packages
+    https://downloads.immortalwrt.org/releases/24.10.6/targets/x86/generic/packages
 "
-for lib in $LIBS32; do
-    name=$(basename "$lib")
-    src="$I386_MOUNT/$lib"
-    if [ -f "$src" ]; then
-        cp "$src" "files/lib32/$name"
-        echo "  $name → /lib32/"
-    else
-        echo "  (缺失) $name — 部分 32 位程序可能无法运行"
-    fi
+I386_PKG_CACHE="$WORKDIR/i386-pkg-cache-$$"
+mkdir -p "$I386_PKG_CACHE"
+
+# 预下载所有 repo 索引
+for repo_url in $I386_PKG_REPOS; do
+    repo_name=$(echo "$repo_url" | awk -F/ '{print $(NF-1)"/"$NF}')
+    index_file="$I386_PKG_CACHE/${repo_name//\//_}.idx"
+    wget -q --timeout=30 -O "${index_file}.gz" "$repo_url/Packages.gz" 2>/dev/null && \
+        gunzip -f "${index_file}.gz" 2>/dev/null && \
+        echo "  Index cached: $repo_name" || true
 done
+
+# 在所有索引中查找 ipk 文件名
+find_ipk() {
+    local pkg="$1"
+    for idx in "$I386_PKG_CACHE"/*.idx; do
+        [ -f "$idx" ] || continue
+        awk -v pkg="$pkg" '
+            /^Package:/{p=$2} /^Filename:/{f=$2}
+            p==pkg && f{print f; exit}
+        ' "$idx"
+    done
+}
+
+extract_lib32() {
+    local soname="$1"
+    local ipk_pkg="$2"
+
+    # 1) 在 rootfs 中灵活搜索
+    local src
+    src=$(find "$I386_MOUNT/lib" "$I386_MOUNT/usr/lib" -maxdepth 2 \
+        \( -name "$soname" -o -name "${soname}.*" \) \( -type f -o -type l \) 2>/dev/null | head -1)
+    if [ -n "$src" ] && [ -f "$src" ]; then
+        cp -L "$src" "files/lib32/$soname"
+        echo "  $soname → /lib32/ (from rootfs)"
+        return 0
+    fi
+
+    # 2) 从 i386 ipk 下载提取
+    local ipk_path=$(find_ipk "$ipk_pkg")
+    if [ -n "$ipk_path" ]; then
+        # 根据 ipk 路径判断所属 repo
+        local repo_base="https://downloads.immortalwrt.org/releases/24.10.6"
+        local ipk_url
+        case "$ipk_path" in
+            */generic/*) ipk_url="$repo_base/targets/x86/generic/packages/$ipk_path" ;;
+            *)           ipk_url="$repo_base/packages/i386_pentium4/$ipk_path" ;;
+        esac
+
+        local ipk_file="$I386_PKG_CACHE/${ipk_pkg}.ipk"
+        local ipk_dir="$I386_PKG_CACHE/${ipk_pkg}"
+        if wget -q --timeout=60 -O "$ipk_file" "$ipk_url" 2>/dev/null; then
+            mkdir -p "$ipk_dir"
+            if tar -xzf "$ipk_file" -C "$ipk_dir" ./data.tar.gz 2>/dev/null && \
+               tar -xzf "$ipk_dir/data.tar.gz" -C "$ipk_dir" 2>/dev/null; then
+                local found
+                found=$(find "$ipk_dir" -name "$soname" -o -name "${soname}.*" 2>/dev/null | head -1)
+                if [ -n "$found" ] && [ -f "$found" ]; then
+                    cp -L "$found" "files/lib32/$soname"
+                    echo "  $soname → /lib32/ (from $ipk_pkg ipk)"
+                    rm -rf "$ipk_dir" "$ipk_file"
+                    return 0
+                fi
+            fi
+            rm -rf "$ipk_dir" "$ipk_file"
+        fi
+    fi
+
+    echo "  (缺失) $soname — 刷机后可用 opkg install $ipk_pkg 补装"
+    return 1
+}
+
+# 按 soname → ipk 包名 正确映射（已通过仓库验证）
+extract_lib32 "libgcc_s.so.1"     "libgcc1"
+extract_lib32 "libatomic.so.1"    "libatomic1"
+extract_lib32 "libstdc++.so.6"    "libstdcpp6"
+extract_lib32 "libopenssl.so.3"   "libopenssl3"
+extract_lib32 "libcurl.so.4"      "libcurl4"
+extract_lib32 "libz.so.1"         "zlib"
+
+rm -rf "$I386_PKG_CACHE"
 
 sudo umount "$I386_MOUNT"
 rm -rf "$I386_TMP" "$I386_MOUNT"
