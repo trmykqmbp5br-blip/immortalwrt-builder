@@ -1,6 +1,10 @@
 #!/bin/bash
 # diy-part2.sh - 自定义配置 (在 .config 加载后、make defconfig 前运行)
 
+# ============= 禁用 kenzo feed 中有问题的包（递归依赖）=============
+# luci-app-fchomo 依赖自身导致 Kconfig 递归依赖警告
+sed -i 's/.*CONFIG_PACKAGE_luci-app-fchomo.*/# CONFIG_PACKAGE_luci-app-fchomo is not set/' .config 2>/dev/null || true
+
 # ============= 启用 IA32_EMULATION（32位应用支持）=============
 KERNEL_CONFIG="target/linux/x86/config-6.6"
 if [ -f "$KERNEL_CONFIG" ]; then
@@ -19,6 +23,15 @@ if [ -f "$KERNEL_CONFIG" ]; then
 else
     echo "WARNING: Kernel config not found at $KERNEL_CONFIG"
 fi
+
+# 补充内核新增选项，避免 syncconfig 交互式询问导致编译失败
+# NET_9P_XEN 是 kernel 6.6.133 新增的选项，.config 中未覆盖
+for opt in CONFIG_NET_9P_XEN; do
+    if ! grep -q "^# $opt is not set$\|^$opt=" "$KERNEL_CONFIG" 2>/dev/null; then
+        echo "# $opt is not set" >> "$KERNEL_CONFIG"
+        echo "$opt disabled (kernel new option)"
+    fi
+done
 
 # ============= 预置 32 位 musl 运行时 + 常用库 =============
 #
