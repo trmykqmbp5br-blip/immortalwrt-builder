@@ -17,40 +17,30 @@ else
 fi
 
 # ============= 预置 32 位 musl 运行时 =============
-I386_ARCH="i386_pentium4"
-I386_BASE="https://downloads.immortalwrt.org/releases/24.10.6/packages/${I386_ARCH}/base"
+# libc 是固件内置包，不在可下载的 packages 仓库中。
+# 必须从官方 i386 (generic) rootfs 镜像提取 ld-musl-i386.so.1。
+I386_ROOTFS_URL="https://downloads.immortalwrt.org/releases/24.10.6/targets/x86/generic/immortalwrt-24.10.6-x86-generic-generic-ext4-rootfs.img.gz"
 LIBC32_TMP="/tmp/libc32_$$"
 mkdir -p "$LIBC32_TMP" files/lib
 
-echo "Fetching 32-bit musl runtime..."
-if wget -q --timeout=30 -O "$LIBC32_TMP/Packages.gz" "${I386_BASE}/Packages.gz" 2>/dev/null; then
-    LIBC_IPK=$(zcat "$LIBC32_TMP/Packages.gz" | awk '
-        /^Package: libc$/        { found=1 }
-        /^Filename:/ && found    { print $2; exit }
-    ')
-    if [ -n "$LIBC_IPK" ]; then
-        echo "Downloading $LIBC_IPK ..."
-        wget -q --timeout=30 -O "$LIBC32_TMP/libc.ipk" "${I386_BASE}/${LIBC_IPK}" 2>/dev/null
-
-        (cd "$LIBC32_TMP" && ar x libc.ipk 2>/dev/null) || true
-        if [ -f "$LIBC32_TMP/data.tar.xz" ]; then
-            tar -xf "$LIBC32_TMP/data.tar.xz" -C "$LIBC32_TMP"
-        elif [ -f "$LIBC32_TMP/data.tar.gz" ]; then
-            tar -xzf "$LIBC32_TMP/data.tar.gz" -C "$LIBC32_TMP"
-        fi
-
-        if [ -f "$LIBC32_TMP/lib/libc.so" ]; then
-            cp "$LIBC32_TMP/lib/libc.so" files/lib/ld-musl-i386.so.1
+echo "Fetching 32-bit musl runtime from i386 rootfs..."
+if wget -q --timeout=60 -O "$LIBC32_TMP/rootfs.img.gz" "$I386_ROOTFS_URL" 2>/dev/null; then
+    gunzip -f "$LIBC32_TMP/rootfs.img.gz" 2>/dev/null || true
+    ROOTFS_IMG="$LIBC32_TMP/rootfs.img"
+    if [ -f "$ROOTFS_IMG" ]; then
+        debugfs -R "dump /lib/libc.so $LIBC32_TMP/ld-musl-i386.so.1" "$ROOTFS_IMG" 2>/dev/null
+        if [ -f "$LIBC32_TMP/ld-musl-i386.so.1" ] && [ -s "$LIBC32_TMP/ld-musl-i386.so.1" ]; then
+            cp "$LIBC32_TMP/ld-musl-i386.so.1" files/lib/ld-musl-i386.so.1
             echo "32-bit musl runtime extracted:"
             ls -la files/lib/ld-musl-i386.so.1
         else
-            echo "WARNING: Could not extract 32-bit musl from ipk"
+            echo "WARNING: Could not extract libc.so from i386 rootfs"
         fi
     else
-        echo "WARNING: libc not found in i386 base repo"
+        echo "WARNING: Could not decompress i386 rootfs"
     fi
 else
-    echo "WARNING: Could not download i386 Packages index, skipping 32-bit runtime"
+    echo "WARNING: Could not download i386 rootfs, skipping 32-bit runtime"
 fi
 rm -rf "$LIBC32_TMP"
 
