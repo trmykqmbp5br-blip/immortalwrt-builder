@@ -278,7 +278,7 @@ jobs:
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +$((KEEP_LATEST + 1)) \
           | while read tag; do
-              [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes
+              [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
             done
 
     - name: Delete workflow runs
