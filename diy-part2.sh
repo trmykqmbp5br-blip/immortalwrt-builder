@@ -166,7 +166,8 @@ extract_lib32() {
 extract_lib32 "libgcc_s.so.1"     "libgcc1"
 extract_lib32 "libatomic.so.1"    "libatomic1"
 extract_lib32 "libstdc++.so.6"    "libstdcpp6"
-extract_lib32 "libopenssl.so.3"   "libopenssl3"
+extract_lib32 "libssl.so.3"      "libopenssl3"
+extract_lib32 "libcrypto.so.3"   "libopenssl3"
 extract_lib32 "libcurl.so.4"      "libcurl4"
 extract_lib32 "libz.so.1"         "zlib"
 
