@@ -1,80 +1,63 @@
 #!/bin/bash
 # custom-packages.sh — 第三方软件包选择
-# 参考 CloudImageBuilder 风格，所有包默认注释，按需取消注释
 #
-# 使用减号前缀 "-" 可排除已选中的包
-# 注意: imm 仓库内的包也在此统一管理去留
+# 以下列出了可集成到固件的第三方软件。
+# 取消注释即可启用对应软件，使用减号前缀 "-" 可排除已选中的包。
+#
+# 注意: 源码编译模式下，大部分包来自 kenzo/small feeds(在 diy-part1.sh 中启用)。
+#       少数仅提供二进制 ipk 的包(如 istore) 通过 prepare-store.sh 处理。
 
-# ==================== imm 仓库插件 ====================
-# 以下来自 ImmortalWrt 官方 feeds，编译时自动解析依赖
-# 取消注释即可启用
-
-# --- 磁盘/文件 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-diskman-zh-cn"
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-filemanager-zh-cn"
-
-# --- 网页终端 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-ttyd-zh-cn"
-
-# --- SFTP 服务器 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES openssh-sftp-server"
-
-# --- 网络工具 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-upnp-zh-cn"
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES socat"
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES iperf3"
-
-# --- IRQ 平衡 (多核路由优化) ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-irqbalance-zh-cn"
-
-# --- 动态 DNS ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-ddns-zh-cn ddns-scripts-aliyun"
-
-# --- ACME 证书 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-acme-zh-cn"
-
-# --- Aria2 下载器 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-aria2-zh-cn"
-
-# --- Argon 主题 + 配置 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
-
-# --- 高级设置 by sirpdboy (与 argon-config 冲突) ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-advancedplus luci-i18n-advancedplus-zh-cn -luci-app-argon-config -luci-i18n-argon-config-zh-cn"
-
-# --- 分区扩容 by sirpdboy ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-partexp luci-i18n-partexp-zh-cn"
-
-# --- Turbo ACC 网络加速 (集成 BBR/shortcut-fe) ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-turboacc"
-
-# --- 任务计划 ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-taskplan luci-i18n-taskplan-zh-cn"
-
-# --- MosDNS (替代 SmartDNS) ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-mosdns luci-i18n-mosdns-zh-cn"
-
-# --- AdGuard Home ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-adguardhome"
-
-# ==================== kenzo/small 第三方插件 (需启用 diy-part1.sh 中的 feed) ====================
-
-# --- PassWall ---
+# ==================== 代理/VPN 类 ====================
+# 注意: 你不需要 OpenClash，以下代理选项仅供参考
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-passwall-zh-cn"
-
-# --- HomeProxy ---
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-homeproxy-zh-cn"
-
-# --- SSR-Plus (支持 mihomo) ---
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-ssr-plus luci-i18n-ssr-plus-zh-cn"
 
-# --- OpenClash (需额外下载内核) ---
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-openclash"
+# ==================== 实用工具 ====================
+# 磁盘管理
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-diskman-zh-cn"
+# 文件管理器 (浏览器内管理文件)
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-filemanager-zh-cn"
+# 网页终端 ttyd
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-ttyd-zh-cn"
+# SFTP 服务器 (方便传文件)
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES openssh-sftp-server"
+# DDNS 动态域名
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-ddns-zh-cn ddns-scripts-aliyun"
+# ACME 证书管理
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-acme-zh-cn"
+# Aria2 下载器
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-aria2-zh-cn"
+# socat (端口转发)
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES socat"
+# iperf3 网络测速
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES iperf3"
+# IRQ 平衡 (多核路由优化)
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-irqbalance-zh-cn"
+# UPnP
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-upnp-zh-cn"
 
-# ==================== OpenClash 内核下载 (启用 OpenClash 时必须) ====================
-# 以下由 build.sh 中的逻辑自动处理，此处无需手动添加
+# ==================== 主题 ====================
+# Argon 主题 + 配置
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
 
-# ==================== iStore 商店 ====================
-# 通过 workflow UI 选项 enable_store 控制，此处为占位
-# 不要取消注释此行，由 workflow 自动注入
+# ==================== 网络服务 ====================
+# MosDNS (替代 SmartDNS)
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-mosdns luci-i18n-mosdns-zh-cn"
+# AdGuard Home
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-adguardhome"
+
+# ==================== 系统工具 ====================
+# 高级设置 by sirpdboy (注意: 与 argon-config 冲突，启用时需排除 argon-config)
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-advancedplus luci-i18n-advancedplus-zh-cn -luci-app-argon-config -luci-i18n-argon-config-zh-cn"
+# 分区扩容 by sirpdboy
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-partexp luci-i18n-partexp-zh-cn"
+# Turbo ACC 网络加速 (集成 BBR/shortcut-fe)
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-turboacc"
+# 任务计划
+#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-taskplan luci-i18n-taskplan-zh-cn"
+
+# ==================== ISTORE 商店 (需二进制 ipk) ====================
+# 启用 istore 需要同步勾选 workflow 中的 enable_store 选项
+# 此处仅作占位，实际由 prepare-store.sh 处理
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"
