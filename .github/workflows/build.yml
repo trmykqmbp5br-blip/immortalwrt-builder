@@ -60,22 +60,65 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Maximize build disk space
+    - name: Show initial disk usage
+      run: |
+        echo "=== 初始磁盘状态 ==="
+        df -hT
+        echo "====================="
+
+    # 第一轮：清理各类工具链缓存 (npm/homebrew/apt/docker/os-swap)
+    - name: Optimize disk space (round 1)
+      uses: hugoalh/disk-space-optimizer-ghaction@v0.8.1
+      with:
+        operate_sudo: 'True'
+        general_include: '.+'
+        general_exclude: |-
+          ^GCC$
+          ^G\+\+$
+          Clang
+          LLVM
+        docker_include: '.+'
+        docker_prune: 'True'
+        docker_clean: 'True'
+        apt_prune: 'True'
+        apt_clean: 'True'
+        homebrew_prune: 'True'
+        homebrew_clean: 'True'
+        npm_prune: 'True'
+        npm_clean: 'True'
+        os_swap: 'True'
+
+    # 第二轮：移除大型 SDK + LVM 扩容
+    - name: Maximize build disk space (round 2)
       uses: easimon/maximize-build-space@master
       with:
+        root-reserve-mb: 3072
+        swap-size-mb: 1
+        overprovision-lvm: 'true'
         remove-dotnet: 'true'
         remove-android: 'true'
         remove-haskell: 'true'
         remove-codeql: 'true'
         remove-docker-images: 'true'
 
+    - name: Show disk usage after cleanup
+      run: |
+        echo "=== 清理后磁盘状态 ==="
+        df -hT
+        echo "======================="
+
     - name: Install build dependencies
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
+        # 将临时目录指向 Runner 主磁盘，避开 /tmp tmpfs 限制
         export TMPDIR=$RUNNER_TEMP
+        sudo mkdir -p $TMPDIR
+
+        # 彻底清理 APT 缓存
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
         sudo apt-get update -y
         sudo apt-get install -y --no-install-recommends \
           ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
@@ -87,10 +130,16 @@ jobs:
           python3 python3-pip python3-pyelftools python3-setuptools qemu-utils re2c rsync \
           scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto \
           xxd zlib1g-dev zstd
+
+        # 安装后再次清理，防止后续步骤空间不足
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
         df -hT / /workdir 2>/dev/null || df -hT /
         echo "--- Build dependencies installed, disk status above ---"
+
+        echo "=== 安装依赖后磁盘状态 ==="
+        df -hT
+        echo "==========================="
 
     - name: Setup build environment
       run: |
@@ -134,10 +183,6 @@ jobs:
         sed -i "s|PPPOE_WANB_ACCOUNT|pppoe_wanb_account=\"${{ github.event.inputs.pppoe_wanb_account }}\"|" files/etc/config/pppoe-settings
         sed -i "s|PPPOE_WANB_PASSWORD|pppoe_wanb_password=\"${{ github.event.inputs.pppoe_wanb_password }}\"|" files/etc/config/pppoe-settings
         echo "PPPoE settings file generated"
-        # WARNING: Credentials may appear in workflow logs.
-        # Consider using GitHub Secrets for production use:
-        #   secrets.PPPOE_WAN_ACCOUNT / secrets.PPPOE_WAN_PASSWORD
-        #   secrets.PPPOE_WANB_ACCOUNT / secrets.PPPOE_WANB_PASSWORD
 
     - name: Load custom feeds
       run: |
@@ -171,12 +216,24 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
+    - name: Download all sources
+      working-directory: openwrt
+      run: |
+        echo "=== 下载前磁盘状态 ==="
+        df -hT .
+        echo "======================="
+        make download -j$(nproc) V=s
+        echo "=== 下载后磁盘状态 ==="
+        df -hT .
+        echo "======================="
+
     - name: Compile the firmware
       id: compile
+      working-directory: openwrt
       run: |
-        echo "=== Disk before compile ==="
-        df -hT / /workdir 2>/dev/null || df -hT /
-        cd openwrt
+        echo "=== 编译前磁盘状态 ==="
+        df -hT .
+        echo "======================="
         make defconfig
         echo -e "$(nproc) thread compile"
         make -j$(nproc) V=s || make -j1 V=s

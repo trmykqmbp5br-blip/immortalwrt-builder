@@ -16,35 +16,109 @@ else
     echo "WARNING: Kernel config not found at $KERNEL_CONFIG"
 fi
 
-# ============= 预置 32 位 musl 运行时 =============
-# libc 是固件内置包，不在可下载的 packages 仓库中。
-# 必须从官方 i386 (generic) rootfs 镜像提取 ld-musl-i386.so.1。
-I386_ROOTFS_URL="https://downloads.immortalwrt.org/releases/24.10.6/targets/x86/generic/immortalwrt-24.10.6-x86-generic-generic-ext4-rootfs.img.gz"
-# 注意: 不能用 /tmp（GitHub Actions runner 的 /tmp 是 tmpfs，仅 2-4GB）
-# rootfs 镜像解压后有 ~1.5GB，必须放工作目录
-LIBC32_TMP="${GITHUB_WORKSPACE:-.}/libc32-tmp-$$"
-mkdir -p "$LIBC32_TMP" files/lib
+# ============= 预置 32 位 musl 运行时 + 常用库 =============
+#
+# 方案说明:
+#   内核 IA32_EMULATION 只负责 syscall 兼容，用户态库必须自己提供。
+#   仅提供 ld-musl-i386.so.1 (libc) 是不够的——大部分 32 位程序还依赖
+#   libgcc_s, libstdc++, libopenssl, libcurl, libz 等。
+#
+#   这里从 i386 rootfs 挂载提取多 library，放入 /lib32/。
+#   32 位程序通过 /usr/bin/run-i386 包装脚本运行，它会用 --library-path
+#   告诉 32 位 musl ld 优先从 /lib32/ 加载库，不会和 x86_64 的库冲突。
+#   直接执行 32 位程序仍会触发内核加载 /lib/ld-musl-i386.so.1，但缺少
+#   --library-path 时会去 /lib/ 查找 → 找到 64 位库 → 失败。
+#   因此 32 位动态链接程序必须通过 run-i386 启动。
+#   纯静态链接的 32 位程序可以直接执行。
+#
+#   注意: 不能用 /tmp（GitHub Actions runner 的 /tmp 是 tmpfs，仅 2-4GB）
+#   rootfs 镜像解压后有 ~1.5GB，必须放工作目录。
+# ================================================================
 
-echo "Fetching 32-bit musl runtime from i386 rootfs..."
-if wget -q --timeout=60 -O "$LIBC32_TMP/rootfs.img.gz" "$I386_ROOTFS_URL" 2>/dev/null; then
-    gunzip -f "$LIBC32_TMP/rootfs.img.gz" 2>/dev/null || true
-    ROOTFS_IMG="$LIBC32_TMP/rootfs.img"
-    if [ -f "$ROOTFS_IMG" ]; then
-        debugfs -R "dump /lib/libc.so $LIBC32_TMP/ld-musl-i386.so.1" "$ROOTFS_IMG" 2>/dev/null
-        if [ -f "$LIBC32_TMP/ld-musl-i386.so.1" ] && [ -s "$LIBC32_TMP/ld-musl-i386.so.1" ]; then
-            cp "$LIBC32_TMP/ld-musl-i386.so.1" files/lib/ld-musl-i386.so.1
-            echo "32-bit musl runtime extracted:"
-            ls -la files/lib/ld-musl-i386.so.1
-        else
-            echo "WARNING: Could not extract libc.so from i386 rootfs"
-        fi
-    else
-        echo "WARNING: Could not decompress i386 rootfs"
-    fi
-else
-    echo "WARNING: Could not download i386 rootfs, skipping 32-bit runtime"
+I386_ROOTFS_URL="https://downloads.immortalwrt.org/releases/24.10.6/targets/x86/generic/immortalwrt-24.10.6-x86-generic-generic-ext4-rootfs.img.gz"
+WORKDIR="${GITHUB_WORKSPACE:-.}"
+I386_TMP="$WORKDIR/i386-rootfs-tmp-$$"
+I386_MOUNT="$WORKDIR/i386-mount-$$"
+mkdir -p "$I386_TMP" "$I386_MOUNT" files/lib files/lib32
+
+echo "Fetching 32-bit runtime from i386 rootfs..."
+
+# Step 1: 下载
+if ! wget -q --timeout=120 -O "$I386_TMP/rootfs.img.gz" "$I386_ROOTFS_URL" 2>/dev/null; then
+    echo "FATAL: 下载 i386 rootfs 失败"
+    echo "  URL: $I386_ROOTFS_URL"
+    exit 1
 fi
-rm -rf "$LIBC32_TMP"
+
+# Step 2: 解压
+gunzip -f "$I386_TMP/rootfs.img.gz" 2>/dev/null || {
+    echo "FATAL: 解压 i386 rootfs 失败"
+    exit 1
+}
+ROOTFS_IMG="$I386_TMP/rootfs.img"
+
+# Step 3: loop mount
+sudo mount -o loop,ro "$ROOTFS_IMG" "$I386_MOUNT" 2>/dev/null
+if ! mountpoint -q "$I386_MOUNT" 2>/dev/null; then
+    echo "FATAL: loop mount i386 rootfs 失败"
+    exit 1
+fi
+echo "Mounted i386 rootfs, extracting libraries..."
+
+# Step 4: 提取 ld-musl-i386.so.1 (必须)
+if [ ! -f "$I386_MOUNT/lib/libc.so" ]; then
+    sudo umount "$I386_MOUNT"
+    echo "FATAL: /lib/libc.so 在 i386 rootfs 中不存在"
+    exit 1
+fi
+cp "$I386_MOUNT/lib/libc.so" files/lib/ld-musl-i386.so.1
+chmod 755 files/lib/ld-musl-i386.so.1
+echo "  ld-musl-i386.so.1 → /lib/"
+
+# Step 5: 提取常用 32 位库 → /lib32/
+LIBS32="
+    lib/libgcc_s.so.1
+    lib/libatomic.so.1
+    usr/lib/libstdc++.so.6
+    usr/lib/libopenssl.so.3
+    usr/lib/libcurl.so.4
+    lib/libz.so.1
+"
+for lib in $LIBS32; do
+    name=$(basename "$lib")
+    src="$I386_MOUNT/$lib"
+    if [ -f "$src" ]; then
+        cp "$src" "files/lib32/$name"
+        echo "  $name → /lib32/"
+    else
+        echo "  (缺失) $name — 部分 32 位程序可能无法运行"
+    fi
+done
+
+sudo umount "$I386_MOUNT"
+rm -rf "$I386_TMP" "$I386_MOUNT"
+
+# Step 6: 创建 run-i386 包装脚本
+mkdir -p files/usr/bin
+cat > files/usr/bin/run-i386 << 'WRAPEOF'
+#!/bin/sh
+# run-i386 — 运行 32 位动态链接程序
+# 直接执行 32 位程序会错误加载 /lib/ 下的 64 位 .so
+# 必须通过本脚本启动，确保 32 位 musl ld 优先搜索 /lib32/
+if [ $# -eq 0 ]; then
+    echo "Usage: run-i386 <32-bit-binary> [args...]" >&2
+    exit 1
+fi
+exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@"
+WRAPEOF
+chmod 755 files/usr/bin/run-i386
+
+echo ""
+echo "=== 32 位运行时就绪 ==="
+ls -lh files/lib/ld-musl-i386.so.1
+ls -lh files/lib32/ 2>/dev/null
+echo "  run-i386 → /usr/bin/"
+echo "======================="
 
 # ============= 预置 32 位 glibc 运行时 =============
 # 绝大多数预编译的 32 位 Linux 程序链接 glibc（非 musl）。

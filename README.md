@@ -50,7 +50,55 @@ ssh -i id_ed25519_claude root@192.168.100.1 'sysupgrade -r /tmp/immortalwrt-back
 
 flash.sh 脚本仅负责构建+刷写，不处理备份，备份由用户手动管理。
 
-## 构建参数说明
+## 32 位应用运行指南
+
+### 原理
+
+固件预置了以下 32 位库：
+
+| 文件 | 路径 | 说明 |
+|------|------|------|
+| `ld-musl-i386.so.1` | `/lib/` | musl 动态链接器（也是 libc） |
+| `libgcc_s.so.1` | `/lib32/` | GCC 运行时（异常处理/栈展开） |
+| `libstdc++.so.6` | `/lib32/` | C++ 标准库 |
+| `libatomic.so.1` | `/lib32/` | 原子操作支持 |
+| `libopenssl.so.3` | `/lib32/` | TLS/加密 |
+| `libcurl.so.4` | `/lib32/` | HTTP 客户端 |
+| `libz.so.1` | `/lib32/` | 压缩/解压 |
+
+### 使用方式
+
+**纯静态链接的 32 位程序** — 直接运行，不需要任何额外操作：
+
+```bash
+./static-32bit-binary
+```
+
+**动态链接的 32 位程序** — 必须通过 `run-i386` 启动：
+
+```bash
+run-i386 /path/to/32bit-binary [args...]
+```
+
+`run-i386` 会通过 `--library-path` 告诉 32 位 musl 动态链接器优先从 `/lib32/` 搜索库，避免错误加载 `/lib/` 下的 64 位版本。
+
+直接执行 32 位动态链接程序会因加载到 64 位 .so 而失败。
+
+### 添加更多 32 位库
+
+如果需要的库不在预置列表中：
+
+```bash
+# 从 ImmortalWrt i386 官方镜像中提取
+wget https://downloads.immortalwrt.org/releases/24.10.6/targets/x86/generic/immortalwrt-24.10.6-x86-generic-generic-ext4-rootfs.img.gz
+gunzip immortalwrt-24.10.6-x86-generic-generic-ext4-rootfs.img.gz
+mkdir /tmp/i386-rootfs
+mount -o loop,ro immortalwrt-24.10.6-x86-generic-generic-ext4-rootfs.img /tmp/i386-rootfs
+cp /tmp/i386-rootfs/usr/lib/你需要.so /lib32/
+umount /tmp/i386-rootfs
+```
+
+
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
