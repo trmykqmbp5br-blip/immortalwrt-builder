@@ -111,7 +111,7 @@ find_ipk() {
         local idx="$I386_PKG_CACHE/${repo_name//\//_}.idx"
         [ -f "$idx" ] || continue
         local filename=$(awk -v pkg="$pkg" '
-            /^Package:/{p=$2} /^Filename:/{f=$2}
+            /^Package:/{p=$2; f=""} /^Filename:/{f=$2}
             p==pkg && f{print f; exit}
         ' "$idx")
         if [ -n "$filename" ]; then
