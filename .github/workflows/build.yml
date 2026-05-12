@@ -15,31 +15,6 @@ on:
         options:
           - 'yes'
           - 'no'
-      enable_pppoe:
-        description: 'Configure PPPoE?'
-        required: true
-        default: 'no'
-        type: choice
-        options:
-          - 'yes'
-          - 'no'
-      pppoe_wan_account:
-        description: 'PPPoE WAN account'
-        required: false
-      pppoe_wan_password:
-        description: 'PPPoE WAN password'
-        required: false
-      pppoe_wanb_account:
-        description: 'PPPoE WANB account (second line)'
-        required: false
-      pppoe_wanb_password:
-        description: 'PPPoE WANB password (second line)'
-        required: false
-      enable_store:
-        description: 'Include iStore app store (third-party packages)'
-        required: true
-        default: true
-        type: boolean
 
 permissions:
   contents: write
@@ -144,19 +119,6 @@ jobs:
           ccache-${{ env.REPO_BRANCH }}-
           ccache-
 
-    - name: Generate PPPoE settings
-      if: github.event.inputs.enable_pppoe == 'yes'
-      run: |
-        mkdir -p files/etc/config
-        cat > files/etc/config/pppoe-settings << 'EOF'
-        enable_pppoe="yes"
-        pppoe_wan_account="${{ github.event.inputs.pppoe_wan_account }}"
-        pppoe_wan_password="${{ github.event.inputs.pppoe_wan_password }}"
-        pppoe_wanb_account="${{ github.event.inputs.pppoe_wanb_account }}"
-        pppoe_wanb_password="${{ github.event.inputs.pppoe_wanb_password }}"
-        EOF
-        echo "PPPoE settings file generated"
-
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
@@ -170,14 +132,6 @@ jobs:
     - name: Install feeds
       run: timeout 600 bash -c 'cd openwrt && ./scripts/feeds install -a'
 
-    - name: Enable Store integration
-      if: github.event.inputs.enable_store == 'true'
-      run: |
-        if ! grep -q 'luci-app-store' shell/custom-packages.sh 2>/dev/null; then
-          echo 'CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"' >> shell/custom-packages.sh
-          echo "istore enabled"
-        fi
-
     - name: Load custom configuration
       env:
         INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
@@ -188,6 +142,27 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: Save runtime tarballs
+      working-directory: openwrt
+      run: |
+        if [ -f files/lib/ld-musl-i386.so.1 ] || [ -f files/lib/ld-linux.so.2 ]; then
+          mkdir -p $GITHUB_WORKSPACE/runtime
+          $GITHUB_WORKSPACE/scripts/build-runtime-tarballs.sh
+          echo "=== 运行时 tarball ==="
+          ls -lh $GITHUB_WORKSPACE/runtime/ 2>/dev/null || true
+        else
+          echo "(no 32-bit runtime extracted, skipping tarball)"
+        fi
+
+    - name: Upload runtime tarballs (artifacts)
+      uses: actions/upload-artifact@v4
+      if: '!cancelled()'
+      with:
+        name: runtime-tarballs
+        path: runtime/
+        retention-days: 7
+        if-no-files-found: ignore
 
     - name: Download all sources
       working-directory: openwrt
