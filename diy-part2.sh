@@ -203,13 +203,22 @@ mkdir -p files/usr/bin
 cat > files/usr/bin/run-i386 << 'WRAPEOF'
 #!/bin/sh
 # run-i386 — 运行 32 位动态链接程序
-# 直接执行 32 位程序会错误加载 /lib/ 下的 64 位 .so
-# 必须通过本脚本启动，确保 32 位 musl ld 优先搜索 /lib32/
+# 自动识别 musl 或 glibc，设置正确的库搜索路径到 /lib32/
 if [ $# -eq 0 ]; then
     echo "Usage: run-i386 <32-bit-binary> [args...]" >&2
     exit 1
 fi
-exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@"
+INTERP=$(readelf -l "$1" 2>/dev/null | awk '/Requesting program interpreter/{print $3}' | tr -d '[]')
+case "$INTERP" in
+    */ld-musl-i386.so.1)
+        exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@" ;;
+    */ld-linux.so.2)
+        export LD_LIBRARY_PATH=/lib32:/usr/lib32${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+        exec "$@" ;;
+    *)
+        echo "Unknown or missing 32-bit interpreter: ${INTERP:-none}" >&2
+        exit 1 ;;
+esac
 WRAPEOF
 chmod 755 files/usr/bin/run-i386
 
@@ -226,8 +235,8 @@ echo "======================="
 # libc6-dev-i386 / gcc-multilib 已由环境准备步骤安装。
 echo "Installing 32-bit glibc runtime..."
 
-GLIBC32_DEST="files/lib"
-mkdir -p "$GLIBC32_DEST"
+GLIBC32_DEST="files/lib32"
+mkdir -p "$GLIBC32_DEST" "files/lib"
 
 # 定位 runner 上的 32 位库目录
 I386_LIB=""
@@ -250,51 +259,44 @@ if [ -z "$I386_LIB" ]; then
 else
     echo "Found 32-bit glibc at: $I386_LIB"
 
-    # --- glibc 核心运行时 ---
-    # ld-linux.so.2: 32 位动态链接器（ELF .interp 硬编码此路径）
-    if copy32 "/lib/ld-linux.so.2" "$GLIBC32_DEST/ld-linux.so.2" || \
-       copy32 "$I386_LIB/ld-linux.so.2" "$GLIBC32_DEST/ld-linux.so.2"; then
-        echo "  ld-linux.so.2 OK"
+    # ld-linux.so.2 必须放 /lib/（ELF .interp 硬编码），其余放 /lib32/
+    if copy32 "/lib/ld-linux.so.2" "files/lib/ld-linux.so.2" || \
+       copy32 "$I386_LIB/ld-linux.so.2" "files/lib/ld-linux.so.2"; then
+        echo "  ld-linux.so.2 → /lib/"
     else
         echo "  FAIL: ld-linux.so.2 not found"
     fi
 
-    # 核心库（几乎所有 32 位程序依赖）
     for lib in libc.so.6 libpthread.so.0 libm.so.6 libdl.so.2 librt.so.1 libutil.so.1 libresolv.so.2; do
-        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib OK" || echo "  WARNING: $lib missing"
+        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib → /lib32/" || echo "  WARNING: $lib missing"
     done
 
-    # 可选但常见的 NSS 库（DNS/用户查找）
     for lib in libnss_dns.so.2 libnss_files.so.2; do
-        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib OK" || true
+        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib → /lib32/" || true
     done
 
-    # --- GCC 运行时 & C++ 标准库 ---
     for lib in libgcc_s.so.1 libstdc++.so.6; do
         if copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/"; then
-            echo "  $lib OK"
+            echo "  $lib → /lib32/"
         else
-            # ubuntu-22.04 上 lib32stdc++6 可能放在 /usr/lib/x86_64-linux-gnu/ 下
             FOUND=$(find /usr/lib /lib -name "$lib" -type f 2>/dev/null | grep -E 'i386|i686|32' | head -1)
             if [ -n "$FOUND" ]; then
                 cp -L "$FOUND" "$GLIBC32_DEST/"
-                echo "  $lib OK (from $FOUND)"
+                echo "  $lib → /lib32/ (from $FOUND)"
             else
                 echo "  WARNING: $lib not found"
             fi
         fi
     done
 
-    # --- zlib（极常用依赖）---
-    copy32 "$I386_LIB/libz.so.1" "$GLIBC32_DEST/" && echo "  libz.so.1 OK" || true
+    copy32 "$I386_LIB/libz.so.1" "$GLIBC32_DEST/" && echo "  libz.so.1 → /lib32/" || true
 
-    # --- OpenSSL（网络程序常用）---
     for lib in libssl.so.3 libcrypto.so.3; do
-        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib OK" || true
+        copy32 "$I386_LIB/$lib" "$GLIBC32_DEST/" && echo "  $lib → /lib32/" || true
     done
 
     echo "32-bit glibc runtime files:"
-    ls -la "$GLIBC32_DEST"/ld-linux.so.2 "$GLIBC32_DEST"/libc.so.6 "$GLIBC32_DEST"/libstdc++.so.6 2>/dev/null || true
+    ls -la files/lib/ld-linux.so.2 "$GLIBC32_DEST"/libc.so.6 "$GLIBC32_DEST"/libstdc++.so.6 2>/dev/null || true
 fi
 
 # ============= Docker 开关 =============
