@@ -107,14 +107,20 @@ I386_PKG_REPOS="
 I386_PKG_CACHE="$WORKDIR/i386-pkg-cache-$$"
 mkdir -p "$I386_PKG_CACHE"
 
-# 预下载所有 repo 索引
+# 确保异常退出时清理临时目录
+trap "sudo umount '$I386_MOUNT' 2>/dev/null; rm -rf '$I386_TMP' '$I386_MOUNT' '$I386_PKG_CACHE'" EXIT
+
+# 预下载所有 repo 索引（并行）
 for repo_url in $I386_PKG_REPOS; do
-    repo_name=$(echo "$repo_url" | awk -F/ '{print $(NF-1)"/"$NF}')
-    index_file="$I386_PKG_CACHE/${repo_name//\//_}.idx"
-    wget -q --timeout=30 -O "${index_file}.gz" "$repo_url/Packages.gz" 2>/dev/null && \
-        gunzip -f "${index_file}.gz" 2>/dev/null && \
-        echo "  Index cached: $repo_name" || true
+    (
+        repo_name=$(echo "$repo_url" | awk -F/ '{print $(NF-1)"/"$NF}')
+        index_file="$I386_PKG_CACHE/${repo_name//\//_}.idx"
+        wget -q --timeout=30 -O "${index_file}.gz" "$repo_url/Packages.gz" 2>/dev/null && \
+            gunzip -f "${index_file}.gz" 2>/dev/null && \
+            echo "  Index cached: $repo_name" || true
+    ) &
 done
+wait
 
 # 在所有索引中查找 ipk，返回完整下载 URL
 find_ipk() {
@@ -289,22 +295,19 @@ else
 fi
 
 # ============= Docker 开关 =============
+DOCKER_PKGS="dockerd docker docker-compose luci-lib-docker luci-app-docker luci-app-dockerman"
 if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
     echo "Enabling Docker packages..."
-    sed -i 's/.*CONFIG_PACKAGE_dockerd.*/CONFIG_PACKAGE_dockerd=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker.*/CONFIG_PACKAGE_docker=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker-compose.*/CONFIG_PACKAGE_docker-compose=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-lib-docker.*/CONFIG_PACKAGE_luci-lib-docker=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-docker.*/CONFIG_PACKAGE_luci-app-docker=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-dockerman.*/CONFIG_PACKAGE_luci-app-dockerman=y/' .config
+    for pkg in $DOCKER_PKGS; do
+        pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
+        sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}=y/" .config
+    done
 else
     echo "Disabling Docker packages..."
-    sed -i 's/.*CONFIG_PACKAGE_dockerd.*/# CONFIG_PACKAGE_dockerd is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker .*/# CONFIG_PACKAGE_docker is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker-compose.*/# CONFIG_PACKAGE_docker-compose is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-lib-docker.*/# CONFIG_PACKAGE_luci-lib-docker is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-docker.*/# CONFIG_PACKAGE_luci-app-docker is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-dockerman.*/# CONFIG_PACKAGE_luci-app-dockerman is not set/' .config
+    for pkg in $DOCKER_PKGS; do
+        pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
+        sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/# CONFIG_PACKAGE_${pkg_conf} is not set/" .config
+    done
 fi
 
 # ============= Rootfs 大小调整 =============

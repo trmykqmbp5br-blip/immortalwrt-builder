@@ -7,7 +7,7 @@
 #
 # 用法: source shell/prepare-store.sh && prepare_store_packages "files" "$CUSTOM_PACKAGES"
 
-STORE_TMP="/tmp/store-repo-$$"
+STORE_TMP="${WORKDIR:-.}/store-repo-$$"
 
 prepare_store_packages() {
     local FILES_DIR="${1:-files}"
@@ -17,11 +17,12 @@ prepare_store_packages() {
 
     [ -z "$WANTED" ] && { echo "无指定 store 包，跳过"; return 0; }
 
-    echo "克隆 wukongdaily/store ..."
-    git clone --depth=1 https://github.com/wukongdaily/store.git "$STORE_TMP" 2>/dev/null || {
-        echo "WARNING: 无法克隆 store 仓库，跳过 store 包"
-        return 0
+    echo "克隆 wukongdaily/store (仅 x86) ..."
+    git clone --depth=1 --filter=blob:none --sparse https://github.com/wukongdaily/store.git "$STORE_TMP" 2>/dev/null || {
+        echo "ERROR: 无法克隆 store 仓库，store 包将缺失"
+        return 1
     }
+    git -C "$STORE_TMP" sparse-checkout set run/x86 2>/dev/null || true
 
     mkdir -p "$FILES_DIR"
 

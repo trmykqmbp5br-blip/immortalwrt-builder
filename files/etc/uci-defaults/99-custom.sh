@@ -98,7 +98,7 @@ elif [ "$count" -gt 1 ]; then
     fi
 
     # --- 更新 br-lan 端口 ---
-    section=$(uci show network | awk -F '[.=]' '/\.@?device\[\d+\]\.name=.br-lan.$/ {print $2; exit}')
+    section=$(uci show network | awk -F '[.=]' '/\.@?device\[[0-9]+\]\.name=.br-lan.$/ {print $2; exit}')
     if [ -z "$section" ]; then
         echo "error: cannot find device 'br-lan'." >>$LOGFILE
     else
@@ -162,139 +162,47 @@ elif [ "$count" -gt 1 ]; then
         uci commit network
         uci commit firewall
 
-        # ============= mwan3 负载均衡配置 =============
         if command -v mwan3 >/dev/null 2>&1; then
-            echo "mwan3 detected, configuring load balancing..." >>$LOGFILE
-
-            uci set mwan3.wan=interface
-            uci set mwan3.wan.enabled='1'
-            uci set mwan3.wan.family='ipv4'
-            uci set mwan3.wan.reliability='2'
-            uci add_list mwan3.wan.track_ip='223.5.5.5'
-            uci add_list mwan3.wan.track_ip='119.29.29.29'
-            uci set mwan3.wan.flush_conntrack='disconnected'
-
-            uci set mwan3.wanb=interface
-            uci set mwan3.wanb.enabled='1'
-            uci set mwan3.wanb.family='ipv4'
-            uci set mwan3.wanb.reliability='2'
-            uci add_list mwan3.wanb.track_ip='223.5.5.5'
-            uci add_list mwan3.wanb.track_ip='119.29.29.29'
-            uci set mwan3.wanb.flush_conntrack='disconnected'
-
-            uci set mwan3.wan_6=interface
-            uci set mwan3.wan_6.enabled='1'
-            uci set mwan3.wan_6.family='ipv6'
-            uci set mwan3.wan_6.reliability='0'
-
-            uci set mwan3.wanb_6=interface
-            uci set mwan3.wanb_6.enabled='1'
-            uci set mwan3.wanb_6.family='ipv6'
-            uci set mwan3.wanb_6.reliability='0'
-
-            uci set mwan3.wan_v4=member
-            uci set mwan3.wan_v4.interface='wan'
-            uci set mwan3.wan_v4.metric='1'
-            uci set mwan3.wan_v4.weight='1'
-
-            uci set mwan3.wanb_v4=member
-            uci set mwan3.wanb_v4.interface='wanb'
-            uci set mwan3.wanb_v4.metric='1'
-            uci set mwan3.wanb_v4.weight='1'
-
-            uci set mwan3.wan_v6=member
-            uci set mwan3.wan_v6.interface='wan_6'
-            uci set mwan3.wan_v6.metric='1'
-            uci set mwan3.wan_v6.weight='1'
-
-            uci set mwan3.wanb_v6=member
-            uci set mwan3.wanb_v6.interface='wanb_6'
-            uci set mwan3.wanb_v6.metric='1'
-            uci set mwan3.wanb_v6.weight='1'
-
-            uci set mwan3.balanced=policy
-            uci add_list mwan3.balanced.use_member='wan_v4'
-            uci add_list mwan3.balanced.use_member='wanb_v4'
-            uci add_list mwan3.balanced.use_member='wan_v6'
-            uci add_list mwan3.balanced.use_member='wanb_v6'
-            uci set mwan3.balanced.last_resort='unreachable'
-
-            uci set mwan3.wan_only=policy
-            uci add_list mwan3.wan_only.use_member='wan_v4'
-            uci add_list mwan3.wan_only.use_member='wan_v6'
-            uci set mwan3.wan_only.last_resort='unreachable'
-
-            uci set mwan3.wanb_only=policy
-            uci add_list mwan3.wanb_only.use_member='wanb_v4'
-            uci add_list mwan3.wanb_only.use_member='wanb_v6'
-            uci set mwan3.wanb_only.last_resort='unreachable'
-
-            uci set mwan3.https=rule
-            uci set mwan3.https.dest_port='443'
-            uci set mwan3.https.proto='tcp'
-            uci set mwan3.https.use_policy='balanced'
-
-            uci set mwan3.default_v4=rule
-            uci set mwan3.default_v4.dest_ip='0.0.0.0/0'
-            uci set mwan3.default_v4.family='ipv4'
-            uci set mwan3.default_v4.use_policy='balanced'
-
-            uci set mwan3.default_v6=rule
-            uci set mwan3.default_v6.dest_ip='::/0'
-            uci set mwan3.default_v6.family='ipv6'
-            uci set mwan3.default_v6.use_policy='balanced'
-
-            uci commit mwan3
-            echo "mwan3 load balancing configured" >>$LOGFILE
+            echo "mwan3 detected, using pre-built config from /etc/config/mwan3" >>$LOGFILE
         fi
     fi
 fi
 
 # ============= Docker 防火墙规则 =============
 if command -v dockerd >/dev/null 2>&1; then
-    echo "Docker detected, loading kernel modules..." >>$LOGFILE
-    modprobe br-netfilter 2>/dev/null && echo "br-netfilter loaded" >>$LOGFILE
-    modprobe veth 2>/dev/null && echo "veth loaded" >>$LOGFILE
+    echo "Docker detected, configuring kernel parameters..." >>$LOGFILE
     sysctl -w net.bridge.bridge-nf-call-iptables=1 >>$LOGFILE 2>&1
     grep -q 'bridge-nf-call-iptables' /etc/sysctl.conf 2>/dev/null || \
         echo 'net.bridge.bridge-nf-call-iptables=1' >> /etc/sysctl.conf
 
     echo "Docker detected, configuring firewall rules..." >>$LOGFILE
-    FW_FILE="/etc/config/firewall"
 
-    uci delete firewall.docker
+    # 检查 docker zone 是否已存在，避免重复添加
+    if uci get firewall.docker >/dev/null 2>&1; then
+        echo "Docker firewall zone already exists, skipping." >>$LOGFILE
+    else
 
-    for idx in $(uci show firewall | grep "=forwarding" | cut -d[ -f2 | cut -d] -f1 | sort -rn); do
-        src=$(uci get firewall.@forwarding[$idx].src 2>/dev/null)
-        dest=$(uci get firewall.@forwarding[$idx].dest 2>/dev/null)
-        if [ "$src" = "docker" ] || [ "$dest" = "docker" ]; then
-            uci delete firewall.@forwarding[$idx]
-        fi
-    done
+    uci set firewall.docker=zone
+    uci set firewall.docker.name='docker'
+    uci set firewall.docker.input='ACCEPT'
+    uci set firewall.docker.output='ACCEPT'
+    uci set firewall.docker.forward='ACCEPT'
+    uci add_list firewall.docker.subnet='172.16.0.0/12'
+
+    uci add firewall forwarding
+    uci set firewall.@forwarding[-1].src='docker'
+    uci set firewall.@forwarding[-1].dest='lan'
+
+    uci add firewall forwarding
+    uci set firewall.@forwarding[-1].src='docker'
+    uci set firewall.@forwarding[-1].dest='wan'
+
+    uci add firewall forwarding
+    uci set firewall.@forwarding[-1].src='lan'
+    uci set firewall.@forwarding[-1].dest='docker'
+
     uci commit firewall
-
-    cat <<'FWEOF' >>"$FW_FILE"
-
-config zone 'docker'
-  option input 'ACCEPT'
-  option output 'ACCEPT'
-  option forward 'ACCEPT'
-  option name 'docker'
-  list subnet '172.16.0.0/12'
-
-config forwarding
-  option src 'docker'
-  option dest 'lan'
-
-config forwarding
-  option src 'docker'
-  option dest 'wan'
-
-config forwarding
-  option src 'lan'
-  option dest 'docker'
-FWEOF
-
+    fi
 else
     echo "Docker not detected, skipping firewall configuration." >>$LOGFILE
 fi

@@ -201,8 +201,7 @@ flash_router() {
 
     echo "开始刷写..."
 
-    # sysupgrade 支持 .gz 直接刷，无需先解压
-    # -r 备份: 刷完重启后自动恢复配置 + 重装备份中记录的软件包
+    # sysupgrade 发送后路由器立即重启，SSH 连接必然断开，exit code 非零是预期行为
     if [ -n "$remote_backup" ]; then
         echo "执行: sysupgrade -r $remote_backup $remote_fw"
         ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
@@ -246,7 +245,7 @@ main() {
             ;;
         3)
             download_firmware ""
-            flash_router "$FIRMWARE_FILE" "$BACKUP_PATH"
+            flash_router "$FIRMWARE_FILE" ""
             ;;
         4)
             echo -n "固件文件路径: "
@@ -264,7 +263,7 @@ main() {
             trigger_build "$ROOTFS"
             wait_build
             download_firmware "$RUN_ID"
-            flash_router "$FIRMWARE_FILE" "$BACKUP_PATH"
+            flash_router "$FIRMWARE_FILE" ""
             ;;
     esac
 }
