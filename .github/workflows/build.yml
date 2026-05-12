@@ -167,7 +167,7 @@ jobs:
       if: github.event.inputs.enable_pppoe == 'yes'
       run: |
         mkdir -p files/etc/config
-        cat > files/etc/config/pppoe-settings << EOF
+        cat > files/etc/config/pppoe-settings << 'EOF'
         enable_pppoe="yes"
         pppoe_wan_account="${{ github.event.inputs.pppoe_wan_account }}"
         pppoe_wan_password="${{ github.event.inputs.pppoe_wan_password }}"

@@ -203,22 +203,16 @@ mkdir -p files/usr/bin
 cat > files/usr/bin/run-i386 << 'WRAPEOF'
 #!/bin/sh
 # run-i386 — 运行 32 位动态链接程序
-# 自动识别 musl 或 glibc，设置正确的库搜索路径到 /lib32/
+# 先尝试 musl ld，失败则假设 glibc（不依赖 readelf/binutils）
 if [ $# -eq 0 ]; then
     echo "Usage: run-i386 <32-bit-binary> [args...]" >&2
     exit 1
 fi
-INTERP=$(readelf -l "$1" 2>/dev/null | awk '/Requesting program interpreter/{print $3}' | tr -d '[]')
-case "$INTERP" in
-    */ld-musl-i386.so.1)
-        exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@" ;;
-    */ld-linux.so.2)
-        export LD_LIBRARY_PATH=/lib32:/usr/lib32${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-        exec "$@" ;;
-    *)
-        echo "Unknown or missing 32-bit interpreter: ${INTERP:-none}" >&2
-        exit 1 ;;
-esac
+if /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 --list "$1" >/dev/null 2>&1; then
+    exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@"
+fi
+export LD_LIBRARY_PATH=/lib32:/usr/lib32${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+exec "$@"
 WRAPEOF
 chmod 755 files/usr/bin/run-i386
 
