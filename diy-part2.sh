@@ -194,13 +194,16 @@ mkdir -p files/usr/bin
 cat > files/usr/bin/run-i386 << 'WRAPEOF'
 #!/bin/sh
 # run-i386 — 运行 32 位动态链接程序
-# 直接执行 32 位程序会错误加载 /lib/ 下的 64 位 .so
-# 必须通过本脚本启动，确保 32 位 musl ld 优先搜索 /lib32/
+# 先尝试 musl ld，失败则假设 glibc（不依赖 readelf/binutils）
 if [ $# -eq 0 ]; then
     echo "Usage: run-i386 <32-bit-binary> [args...]" >&2
     exit 1
 fi
-exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@"
+if /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 --list "$1" >/dev/null 2>&1; then
+    exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@"
+fi
+export LD_LIBRARY_PATH=/lib32:/usr/lib32
+exec "$@"
 WRAPEOF
 chmod 755 files/usr/bin/run-i386
 

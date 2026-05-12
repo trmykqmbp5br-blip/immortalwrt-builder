@@ -159,14 +159,6 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    - name: Restore source download cache
-      uses: actions/cache/restore@v5
-      with:
-        path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
-        restore-keys: |
-          dl-${{ env.REPO_BRANCH }}-
-
     - name: Restore ccache
       uses: actions/cache/restore@v5
       with:
@@ -230,13 +222,6 @@ jobs:
         echo "=== 下载后磁盘状态 ==="
         df -hT .
         echo "======================="
-
-    - name: Save source download cache
-      uses: actions/cache/save@v5
-      if: '!cancelled()'
-      with:
-        path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
 
     - name: Compile the firmware
       id: compile
