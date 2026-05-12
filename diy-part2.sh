@@ -197,6 +197,7 @@ rm -rf "$I386_PKG_CACHE"
 
 sudo umount "$I386_MOUNT"
 rm -rf "$I386_TMP" "$I386_MOUNT"
+trap "" EXIT
 
 # Step 6: 创建 run-i386 包装脚本
 mkdir -p files/usr/bin
