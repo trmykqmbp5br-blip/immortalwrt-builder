@@ -171,10 +171,25 @@ flash_router() {
     scp -i "$SSH_KEY" $SSH_OPTS "$firmware" "root@$ROUTER_IP:$remote_fw" 2>&1
     info "固件已上传到路由器"
 
+    # 自动查找并上传备份文件
+    local backup=""
+    local remote_backup=""
+    BACKUP_DIR="${BACKUP_DIR:-$SCRIPT_DIR}"
+    backup=$(find "$BACKUP_DIR" -maxdepth 1 -name "immortalwrt-backup-*-with-pkgs.tar.gz" -print -quit 2>/dev/null || true)
+    if [ -n "$backup" ] && [ -f "$backup" ]; then
+        local bk_name=$(basename "$backup")
+        remote_backup="/tmp/$bk_name"
+        scp -i "$SSH_KEY" $SSH_OPTS "$backup" "root@$ROUTER_IP:$remote_backup" 2>&1
+        info "备份已上传: $bk_name"
+    else
+        warn "未找到备份文件 immortalwrt-backup-*-with-pkgs.tar.gz，将不保留配置"
+    fi
+
     echo ""
     echo "====================== 准备刷写 ======================"
     echo "警告: 即将刷写固件！路由器将会重启！"
     echo "   固件: $fw_name"
+    [ -n "$backup" ] && echo "   备份: $(basename "$backup")"
     echo ""
     echo -n "确认刷写？(yes/NO): "
     read -r CONFIRM
@@ -187,24 +202,21 @@ flash_router() {
 
     echo "开始刷写..."
 
-    local flash_file="$remote_fw"
-    if [[ "$firmware" == *.gz ]]; then
+    # sysupgrade 支持 .gz 直接刷，无需先解压
+    # -r 备份: 刷完重启后自动恢复配置 + 重装备份中记录的软件包
+    if [ -n "$remote_backup" ]; then
+        echo "执行: sysupgrade -r $remote_backup $remote_fw"
         ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
-            "gunzip -f $remote_fw && echo '解压完成'" 2>&1
-        flash_file="${remote_fw%.gz}"
+            "sysupgrade -r '$remote_backup' '$remote_fw'" 2>&1 || true
+    else
+        echo "执行: sysupgrade $remote_fw"
+        ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
+            "sysupgrade '$remote_fw'" 2>&1 || true
     fi
-
-    echo "执行: sysupgrade $flash_file"
-    ssh -i "$SSH_KEY" $SSH_OPTS "root@$ROUTER_IP" \
-        "sysupgrade $flash_file" 2>&1 || true
 
     echo ""
     info "刷写命令已发送，路由器正在重启..."
     info "等待约 3 分钟后尝试连接..."
-    echo ""
-    echo "刷机完成后手动还原备份:"
-    echo "  scp -i id_ed25519_claude immortalwrt-backup-*.tar.gz root@192.168.100.1:/tmp/"
-    echo "  ssh -i id_ed25519_claude root@192.168.100.1 'sysupgrade -r /tmp/backup.tar.gz'"
 }
 
 # ============= 主菜单 =============
