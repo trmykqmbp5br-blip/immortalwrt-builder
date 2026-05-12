@@ -220,8 +220,8 @@ echo "======================="
 # libc6-dev-i386 / gcc-multilib 已由环境准备步骤安装。
 echo "Installing 32-bit glibc runtime..."
 
-GLIBC32_DEST="files/lib"
-mkdir -p "$GLIBC32_DEST"
+GLIBC32_DEST="files/lib32"
+mkdir -p "$GLIBC32_DEST" "files/lib"
 
 # 定位 runner 上的 32 位库目录
 I386_LIB=""
@@ -245,9 +245,9 @@ else
     echo "Found 32-bit glibc at: $I386_LIB"
 
     # --- glibc 核心运行时 ---
-    # ld-linux.so.2: 32 位动态链接器（ELF .interp 硬编码此路径）
-    if copy32 "/lib/ld-linux.so.2" "$GLIBC32_DEST/ld-linux.so.2" || \
-       copy32 "$I386_LIB/ld-linux.so.2" "$GLIBC32_DEST/ld-linux.so.2"; then
+    # ld-linux.so.2: 32 位动态链接器（ELF .interp 硬编码 /lib/ 路径）
+    if copy32 "/lib/ld-linux.so.2" "files/lib/ld-linux.so.2" || \
+       copy32 "$I386_LIB/ld-linux.so.2" "files/lib/ld-linux.so.2"; then
         echo "  ld-linux.so.2 OK"
     else
         echo "  FAIL: ld-linux.so.2 not found"
