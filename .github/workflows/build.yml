@@ -155,14 +155,6 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    - name: Restore source download cache
-      uses: actions/cache/restore@v5
-      with:
-        path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
-        restore-keys: |
-          dl-${{ env.REPO_BRANCH }}-
-
     - name: Restore ccache
       uses: actions/cache/restore@v5
       with:
@@ -248,6 +240,13 @@ jobs:
     - name: Check space usage
       if: '!cancelled()'
       run: df -hT
+
+    - name: Save ccache
+      uses: actions/cache/save@v5
+      if: '!cancelled()'
+      with:
+        path: ~/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
 
     - name: Organize firmware files
       id: organize
