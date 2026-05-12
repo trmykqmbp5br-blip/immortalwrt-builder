@@ -135,12 +135,8 @@ jobs:
         # 安装后再次清理，防止后续步骤空间不足
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
-        df -hT / /workdir 2>/dev/null || df -hT /
-        echo "--- Build dependencies installed, disk status above ---"
-
-        echo "=== 安装依赖后磁盘状态 ==="
-        df -hT
-        echo "==========================="
+        df -hT /
+        echo "--- Build dependencies installed ---"
 
     - name: Setup build environment
       run: |
@@ -178,17 +174,13 @@ jobs:
       if: github.event.inputs.enable_pppoe == 'yes'
       run: |
         mkdir -p files/etc/config
-        cat > files/etc/config/pppoe-settings << 'PPEOF'
+        cat > files/etc/config/pppoe-settings << EOF
         enable_pppoe="yes"
-        PPPOE_WAN_ACCOUNT
-        PPPOE_WAN_PASSWORD
-        PPPOE_WANB_ACCOUNT
-        PPPOE_WANB_PASSWORD
-        PPEOF
-        sed -i "s|PPPOE_WAN_ACCOUNT|pppoe_wan_account=\"${{ github.event.inputs.pppoe_wan_account }}\"|" files/etc/config/pppoe-settings
-        sed -i "s|PPPOE_WAN_PASSWORD|pppoe_wan_password=\"${{ github.event.inputs.pppoe_wan_password }}\"|" files/etc/config/pppoe-settings
-        sed -i "s|PPPOE_WANB_ACCOUNT|pppoe_wanb_account=\"${{ github.event.inputs.pppoe_wanb_account }}\"|" files/etc/config/pppoe-settings
-        sed -i "s|PPPOE_WANB_PASSWORD|pppoe_wanb_password=\"${{ github.event.inputs.pppoe_wanb_password }}\"|" files/etc/config/pppoe-settings
+        pppoe_wan_account="${{ github.event.inputs.pppoe_wan_account }}"
+        pppoe_wan_password="${{ github.event.inputs.pppoe_wan_password }}"
+        pppoe_wanb_account="${{ github.event.inputs.pppoe_wanb_account }}"
+        pppoe_wanb_password="${{ github.event.inputs.pppoe_wanb_password }}"
+        EOF
         echo "PPPoE settings file generated"
 
     - name: Load custom feeds

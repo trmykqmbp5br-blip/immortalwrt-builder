@@ -4,7 +4,6 @@
 LOGFILE="/etc/config/uci-defaults-log.txt"
 echo "Starting 99-custom.sh at $(date)" >>$LOGFILE
 
-# ============= 读取 PPPoE 配置（由 GitHub Actions 构建时生成）=============
 SETTINGS_FILE="/etc/config/pppoe-settings"
 if [ ! -f "$SETTINGS_FILE" ]; then
     echo "PPPoE settings file not found. Using DHCP for WAN." >>$LOGFILE
@@ -14,7 +13,7 @@ else
     echo "PPPoE settings loaded: enable_pppoe=$enable_pppoe" >>$LOGFILE
 fi
 
-# ============= 获取所有物理接口 =============
+# 获取物理网口
 ifnames=""
 for iface in /sys/class/net/*; do
     iface_name=$(basename "$iface")
@@ -26,7 +25,7 @@ ifnames=$(echo "$ifnames" | awk '{$1=$1};1')
 count=$(echo "$ifnames" | wc -w)
 echo "Detected physical interfaces: $ifnames (count=$count)" >>$LOGFILE
 
-# ============= 根据板子型号映射 WAN 和 LAN 接口 =============
+# 板子型号 → WAN/LAN 映射
 board_name=$(cat /tmp/sysinfo/board_name 2>/dev/null || echo "unknown")
 echo "Board detected: $board_name" >>$LOGFILE
 
@@ -45,12 +44,12 @@ case "$board_name" in
         ;;
 esac
 
-# ============= 主机名映射（解决安卓原生 TV 无法联网）=============
+# 安卓 TV 时间同步域名劫持
 uci add dhcp domain
 uci set "dhcp.@domain[-1].name=time.android.com"
 uci set "dhcp.@domain[-1].ip=203.107.6.88"
 
-# ============= 网络配置 =============
+# 网络配置 (自动适配单/多网口)
 if [ "$count" -eq 1 ]; then
     # 单网口模式：DHCP 自动获取
     uci set network.lan.proto='dhcp'
@@ -65,16 +64,13 @@ if [ "$count" -eq 1 ]; then
     echo "Single-NIC mode: WAN firewall set to ACCEPT for WebUI access" >>$LOGFILE
 
 elif [ "$count" -gt 1 ]; then
-    # ===== 多网口模式 =====
-    # --- WAN 口 ---
+
     uci set network.wan=interface
     uci set network.wan.device="$wan_ifname"
 
-    # --- WAN6 ---
     uci set network.wan6=interface
     uci set network.wan6.device="$wan_ifname"
 
-    # --- PPPoE 配置（仅当 enable_pppoe=yes 时）---
     if [ "$enable_pppoe" = "yes" ]; then
         if [ -n "$pppoe_wan_account" ] && [ -n "$pppoe_wan_password" ]; then
             echo "Configuring WAN PPPoE..." >>$LOGFILE
@@ -97,7 +93,6 @@ elif [ "$count" -gt 1 ]; then
         uci set network.wan6.proto='dhcpv6'
     fi
 
-    # --- 更新 br-lan 端口 ---
     section=$(uci show network | awk -F '[.=]' '/\.@?device\[[0-9]+\]\.name=.br-lan.$/ {print $2; exit}')
     if [ -z "$section" ]; then
         echo "error: cannot find device 'br-lan'." >>$LOGFILE
@@ -109,7 +104,6 @@ elif [ "$count" -gt 1 ]; then
         echo "Updated br-lan ports: $lan_ifnames" >>$LOGFILE
     fi
 
-    # --- LAN 静态 IP ---
     uci set network.lan.proto='static'
     uci set network.lan.netmask='255.255.255.0'
     IP_VALUE_FILE="/etc/config/custom_router_ip.txt"
@@ -122,13 +116,11 @@ elif [ "$count" -gt 1 ]; then
         echo "Default router IP: 192.168.100.1" >>$LOGFILE
     fi
 
-    # --- WAN 防火墙：多网口默认 DENY（安全优先）---
     echo "Multi-NIC mode: WAN firewall remains at default (REJECT)" >>$LOGFILE
 
     uci commit network
 
-    # ============= 第二 WAN (wanb) 配置 =============
-    # 当有 >1 物理网口时启用双 WAN
+    # 第二 WAN (wanb)
     wanb_ifname=$(echo "$ifnames" | awk '{print $2}')
     if [ -n "$wanb_ifname" ]; then
         echo "Configuring second WAN (wanb) on $wanb_ifname" >>$LOGFILE
@@ -168,7 +160,7 @@ elif [ "$count" -gt 1 ]; then
     fi
 fi
 
-# ============= Docker 防火墙规则 =============
+# Docker 防火墙
 if command -v dockerd >/dev/null 2>&1; then
     echo "Docker detected, configuring kernel parameters..." >>$LOGFILE
     sysctl -w net.bridge.bridge-nf-call-iptables=1 >>$LOGFILE 2>&1
@@ -207,8 +199,7 @@ else
     echo "Docker not detected, skipping firewall configuration." >>$LOGFILE
 fi
 
-# ============= 通用设置 =============
-# 所有网口可访问 ttyd 网页终端
+# 通用设置
 uci delete ttyd.@ttyd[0].interface
 
 # 所有网口可 SSH

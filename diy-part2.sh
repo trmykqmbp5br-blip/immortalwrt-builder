@@ -141,14 +141,17 @@ find_ipk() {
     return 1
 }
 
+# 缓存 rootfs 文件列表，避免每个库都 find 遍历一次
+ROOTFS_FILE_CACHE=$(find "$I386_MOUNT/lib" "$I386_MOUNT/usr/lib" -maxdepth 2 \
+    \( -type f -o -type l \) 2>/dev/null)
+
 extract_lib32() {
     local soname="$1"
     local ipk_pkg="$2"
 
-    # 1) 在 rootfs 中灵活搜索
+    # 1) 从缓存的 rootfs 文件列表中搜索
     local src
-    src=$(find "$I386_MOUNT/lib" "$I386_MOUNT/usr/lib" -maxdepth 2 \
-        \( -name "$soname" -o -name "${soname}.*" \) \( -type f -o -type l \) 2>/dev/null | head -1)
+    src=$(echo "$ROOTFS_FILE_CACHE" | grep -E "/${soname}(\.[0-9]+)*$" | head -1)
     if [ -n "$src" ] && [ -f "$src" ]; then
         cp -L "$src" "files/lib32/$soname"
         echo "  $soname → /lib32/ (from rootfs)"
@@ -298,17 +301,18 @@ fi
 DOCKER_PKGS="dockerd docker docker-compose luci-lib-docker luci-app-docker luci-app-dockerman"
 if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
     echo "Enabling Docker packages..."
-    for pkg in $DOCKER_PKGS; do
-        pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
-        sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}=y/" .config
-    done
+    action="=y"
 else
     echo "Disabling Docker packages..."
-    for pkg in $DOCKER_PKGS; do
-        pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
-        sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/# CONFIG_PACKAGE_${pkg_conf} is not set/" .config
-    done
+    action=" is not set"
 fi
+
+sed_args=""
+for pkg in $DOCKER_PKGS; do
+    pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
+    sed_args="$sed_args -e s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}${action}/"
+done
+sed -i $sed_args .config
 
 # ============= Rootfs 大小调整 =============
 if [ -n "${ROOTFS_SIZE:-}" ] && [ "$ROOTFS_SIZE" != "4096" ]; then

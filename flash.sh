@@ -20,9 +20,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-ROUTER_IP="192.168.100.1"
-SSH_KEY="./id_ed25519_claude"
-GITHUB_REPO="trmykqmbp5br-blip/immortalwrt-builder"
+ROUTER_IP="${ROUTER_IP:-192.168.100.1}"
+SSH_KEY="${SSH_KEY:-./id_ed25519_claude}"
+GITHUB_REPO="${GITHUB_REPO:-trmykqmbp5br-blip/immortalwrt-builder}"
 
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -o ConnectTimeout=5"
 
