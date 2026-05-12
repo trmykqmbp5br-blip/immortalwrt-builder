@@ -271,16 +271,13 @@ jobs:
         path: ~/.ccache
         key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
 
-    - name: Package and release firmware
+    - name: Organize firmware files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && success()
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        ARCHIVE="immortalwrt-24.10.6-x86-64-full.tar.gz"
-        tar -caf "$ARCHIVE" .
-        echo "FIRMWARE_ARCHIVE=${PWD}/${ARCHIVE}" >> $GITHUB_ENV
-        ls -lh "$ARCHIVE"
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
@@ -291,7 +288,7 @@ jobs:
       with:
         tag_name: immortalwrt-24.10.6-${{ github.run_number }}
         body_path: release.txt
-        files: ${{ env.FIRMWARE_ARCHIVE }}
+        files: ${{ env.FIRMWARE }}/*squashfs-combined-efi.img.gz
 
     - name: Remove old Releases
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
