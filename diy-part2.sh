@@ -93,110 +93,34 @@ chmod 755 files/lib/ld-musl-i386.so.1
 echo "  ld-musl-i386.so.1 → /lib/"
 
 # Step 5: 提取常用 32 位库 → /lib32/
-# 优先从已挂载的 rootfs 搜索，缺失的从 i386 软件源下载 ipk 提取
-#
-# i386 包分布在 3 个 repo 目录下:
-#   base/      → libopenssl3, zlib
-#   packages/  → libcurl4
-#   targets/   → libgcc1, libatomic1, libstdcpp6
-I386_PKG_REPOS="
-    https://downloads.immortalwrt.org/releases/24.10.6/packages/i386_pentium4/base
-    https://downloads.immortalwrt.org/releases/24.10.6/packages/i386_pentium4/packages
-    https://downloads.immortalwrt.org/releases/24.10.6/targets/x86/generic/packages
-"
-I386_PKG_CACHE="$WORKDIR/i386-pkg-cache-$$"
-mkdir -p "$I386_PKG_CACHE"
+# 从 i386 rootfs 挂载中提取，7 个核心库经确认均在 rootfs 中
+trap "sudo umount '$I386_MOUNT' 2>/dev/null; rm -rf '$I386_TMP' '$I386_MOUNT'" EXIT
 
-# 确保异常退出时清理临时目录
-trap "sudo umount '$I386_MOUNT' 2>/dev/null; rm -rf '$I386_TMP' '$I386_MOUNT' '$I386_PKG_CACHE'" EXIT
-
-# 预下载所有 repo 索引（并行）
-for repo_url in $I386_PKG_REPOS; do
-    (
-        repo_name=$(echo "$repo_url" | awk -F/ '{print $(NF-1)"/"$NF}')
-        index_file="$I386_PKG_CACHE/${repo_name//\//_}.idx"
-        wget -q --timeout=30 -O "${index_file}.gz" "$repo_url/Packages.gz" 2>/dev/null && \
-            gunzip -f "${index_file}.gz" 2>/dev/null && \
-            echo "  Index cached: $repo_name" || true
-    ) &
-done
-wait
-
-# 在所有索引中查找 ipk，返回完整下载 URL
-find_ipk() {
-    local pkg="$1"
-    for repo_url in $I386_PKG_REPOS; do
-        local repo_name=$(echo "$repo_url" | awk -F/ '{print $(NF-1)"/"$NF}')
-        local idx="$I386_PKG_CACHE/${repo_name//\//_}.idx"
-        [ -f "$idx" ] || continue
-        local filename=$(awk -v pkg="$pkg" '
-            /^Package:/{p=$2; f=""} /^Filename:/{f=$2}
-            p==pkg && f{print f; exit}
-        ' "$idx")
-        if [ -n "$filename" ]; then
-            echo "$repo_url/$filename"
-            return 0
-        fi
-    done
-    return 1
-}
-
-# 缓存 rootfs 文件列表，避免每个库都 find 遍历一次
 ROOTFS_FILE_CACHE=$(find "$I386_MOUNT/lib" "$I386_MOUNT/usr/lib" -maxdepth 2 \
     \( -type f -o -type l \) 2>/dev/null)
 
 extract_lib32() {
     local soname="$1"
-    local ipk_pkg="$2"
-
-    # 1) 从缓存的 rootfs 文件列表中搜索
     local src
     src=$(echo "$ROOTFS_FILE_CACHE" | grep -E "/${soname}(\.[0-9]+)*$" | head -1)
     if [ -n "$src" ] && [ -f "$src" ]; then
         cp -L "$src" "files/lib32/$soname"
-        echo "  $soname → /lib32/ (from rootfs)"
+        echo "  $soname → /lib32/"
         return 0
     fi
-
-    # 2) 从 i386 ipk 下载提取（find_ipk 已直接返回完整 URL）
-    local ipk_url=$(find_ipk "$ipk_pkg")
-    if [ -n "$ipk_url" ]; then
-        local ipk_file="$I386_PKG_CACHE/${ipk_pkg}.ipk"
-        local ipk_dir="$I386_PKG_CACHE/${ipk_pkg}"
-        if wget -q --timeout=60 -O "$ipk_file" "$ipk_url" 2>/dev/null; then
-            mkdir -p "$ipk_dir"
-            if tar -xzf "$ipk_file" -C "$ipk_dir" ./data.tar.gz 2>/dev/null && \
-               tar -xzf "$ipk_dir/data.tar.gz" -C "$ipk_dir" 2>/dev/null; then
-                local found
-                found=$(find "$ipk_dir" -name "$soname" -o -name "${soname}.*" 2>/dev/null | head -1)
-                if [ -n "$found" ] && [ -f "$found" ]; then
-                    cp -L "$found" "files/lib32/$soname"
-                    echo "  $soname → /lib32/ (from $ipk_pkg ipk)"
-                    rm -rf "$ipk_dir" "$ipk_file"
-                    return 0
-                fi
-            fi
-            rm -rf "$ipk_dir" "$ipk_file"
-        fi
-    fi
-
-    echo "  (缺失) $soname — 刷机后可用 opkg install $ipk_pkg 补装"
+    echo "  (缺失) $soname"
     return 1
 }
 
-# 按 soname → ipk 包名 正确映射（已通过仓库验证）
-extract_lib32 "libgcc_s.so.1"     "libgcc1"
-extract_lib32 "libatomic.so.1"    "libatomic1"
-extract_lib32 "libstdc++.so.6"    "libstdcpp6"
-extract_lib32 "libssl.so.3"      "libopenssl3"
-extract_lib32 "libcrypto.so.3"   "libopenssl3"
-extract_lib32 "libcurl.so.4"      "libcurl4"
-extract_lib32 "libz.so.1"         "zlib"
+extract_lib32 "libgcc_s.so.1"
+extract_lib32 "libatomic.so.1"
+extract_lib32 "libstdc++.so.6"
+extract_lib32 "libssl.so.3"
+extract_lib32 "libcrypto.so.3"
+extract_lib32 "libcurl.so.4"
+extract_lib32 "libz.so.1"
 
-rm -rf "$I386_PKG_CACHE"
-
-sudo umount "$I386_MOUNT"
-rm -rf "$I386_TMP" "$I386_MOUNT"
+# trap 在脚本退出时自动清理 I386_TMP/I386_MOUNT
 
 # Step 6: 创建 run-i386 包装脚本
 mkdir -p files/usr/bin
