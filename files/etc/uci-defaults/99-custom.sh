@@ -1,8 +1,8 @@
 #!/bin/sh
 # 99-custom.sh — ImmortalWrt 首次启动脚本
-# Log file for debugging
 LOGFILE="/etc/config/uci-defaults-log.txt"
 echo "Starting 99-custom.sh at $(date)" >>$LOGFILE
+STATUS=0
 
 SETTINGS_FILE="/etc/config/pppoe-settings"
 if [ ! -f "$SETTINGS_FILE" ]; then
@@ -217,5 +217,5 @@ if opkg list-installed | grep -q '^luci-app-advancedplus '; then
     sed -i '/\/bin\/zsh/d' /etc/init.d/advancedplus
 fi
 
-echo "99-custom.sh completed at $(date)" >>$LOGFILE
-exit 0
+echo "99-custom.sh completed at $(date) (status=$STATUS)" >>$LOGFILE
+exit $STATUS

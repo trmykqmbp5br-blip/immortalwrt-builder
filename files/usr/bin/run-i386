@@ -1,0 +1,17 @@
+#!/bin/sh
+# run-i386 — 运行 32 位动态链接程序
+# 优先使用 musl ld（/lib32/），失败则回退到 glibc（/lib32/glibc/）
+# 路径分离: musl 库在 /lib32/, glibc 库在 /lib32/glibc/ 避免冲突
+# 纯静态链接的 32 位程序可以直接执行，无需此脚本
+
+if [ $# -eq 0 ]; then
+    echo "Usage: run-i386 <32-bit-binary> [args...]" >&2
+    exit 1
+fi
+
+if /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 --list "$1" >/dev/null 2>&1; then
+    exec /lib/ld-musl-i386.so.1 --library-path /lib32:/usr/lib32 "$@"
+fi
+
+export LD_LIBRARY_PATH=/lib32/glibc:/lib32
+exec "$@"
