@@ -90,19 +90,6 @@ jobs:
         npm_clean: 'True'
         os_swap: 'True'
 
-    # 第二轮：移除大型 SDK + LVM 扩容
-    - name: Maximize build disk space (round 2)
-      uses: easimon/maximize-build-space@master
-      with:
-        root-reserve-mb: 3072
-        swap-size-mb: 4096
-        overprovision-lvm: 'true'
-        remove-dotnet: 'true'
-        remove-android: 'true'
-        remove-haskell: 'true'
-        remove-codeql: 'true'
-        remove-docker-images: 'true'
-
     - name: Show disk usage after cleanup
       run: |
         echo "=== 清理后磁盘状态 ==="
