@@ -113,16 +113,15 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 将临时目录指向 Runner 主磁盘，避开 /tmp tmpfs 限制
         export TMPDIR=$RUNNER_TEMP
         sudo mkdir -p $TMPDIR
-
-        # 彻底清理 APT 缓存
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
-
-        sudo apt-get update -y
-        sudo apt-get install -y --no-install-recommends \
+        timeout 120 sudo apt-get update -y || {
+          echo "apt-get update timeout, retrying..."
+          timeout 120 sudo apt-get update -y
+        }
+        timeout 300 sudo apt-get install -y --no-install-recommends \
           ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
           bzip2 ccache clang cmake cpio curl device-tree-compiler e2fsprogs fastjar flex gawk gettext \
           gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
@@ -132,16 +131,10 @@ jobs:
           python3 python3-pip python3-pyelftools python3-setuptools qemu-utils re2c rsync \
           scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto \
           xxd zlib1g-dev zstd
-
-        # 安装后再次清理，防止后续步骤空间不足
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
         df -hT / /workdir 2>/dev/null || df -hT /
-        echo "--- Build dependencies installed, disk status above ---"
-
-        echo "=== 安装依赖后磁盘状态 ==="
-        df -hT
-        echo "==========================="
+        echo "--- Build dependencies installed ---"
 
     - name: Setup build environment
       run: |
@@ -156,7 +149,7 @@ jobs:
       working-directory: /workdir
       run: |
         df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        timeout 300 git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: Restore ccache
@@ -185,13 +178,13 @@ jobs:
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P1_SH
+        timeout 60 $GITHUB_WORKSPACE/$DIY_P1_SH
 
     - name: Update feeds
-      run: cd openwrt && ./scripts/feeds update -a
+      run: timeout 600 bash -c 'cd openwrt && ./scripts/feeds update -a'
 
     - name: Install feeds
-      run: cd openwrt && ./scripts/feeds install -a
+      run: timeout 600 bash -c 'cd openwrt && ./scripts/feeds install -a'
 
     - name: Enable Store integration
       if: github.event.inputs.enable_store == 'true'
@@ -210,7 +203,7 @@ jobs:
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: Download all sources
       working-directory: openwrt
@@ -218,7 +211,7 @@ jobs:
         echo "=== 下载前磁盘状态 ==="
         df -hT .
         echo "======================="
-        make download -j$(nproc) V=s
+        timeout 1800 make download -j$(nproc) V=s
         echo "=== 下载后磁盘状态 ==="
         df -hT .
         echo "======================="
@@ -230,11 +223,11 @@ jobs:
         echo "=== 编译前磁盘状态 ==="
         df -hT .
         echo "======================="
-        make defconfig
+        timeout 120 make defconfig
         echo "$(nproc) thread compile"
-        if ! make -j$(nproc) V=s; then
+        if ! timeout 14400 make -j$(nproc) V=s; then
           echo "Parallel build failed, retrying with single thread..."
-          make -j1 V=s
+          timeout 28800 make -j1 V=s
         fi
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET_DEVICE_.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
@@ -276,12 +269,14 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        KEEP_LATEST=3
-        gh release list --limit 100 --json tagName --jq '.[].tagName' \
-          | tail -n +$((KEEP_LATEST + 1)) \
-          | while read tag; do
-              [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
-            done
+        timeout 120 bash << 'SCRIPT'
+          KEEP=3
+          gh release list --limit 100 --json tagName --jq '.[].tagName' \
+            | tail -n +$((KEEP + 1)) \
+            | while read tag; do
+                [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
+              done
+        SCRIPT
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
