@@ -90,6 +90,19 @@ jobs:
         npm_clean: 'True'
         os_swap: 'True'
 
+    # 第二轮：移除大型 SDK + LVM 扩容
+    - name: Maximize build disk space (round 2)
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 3072
+        swap-size-mb: 4096
+        overprovision-lvm: 'true'
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+
     - name: Show disk usage after cleanup
       run: |
         echo "=== 清理后磁盘状态 ==="
@@ -123,8 +136,12 @@ jobs:
         # 安装后再次清理，防止后续步骤空间不足
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
-        df -hT /
-        echo "--- Build dependencies installed ---"
+        df -hT / /workdir 2>/dev/null || df -hT /
+        echo "--- Build dependencies installed, disk status above ---"
+
+        echo "=== 安装依赖后磁盘状态 ==="
+        df -hT
+        echo "==========================="
 
     - name: Setup build environment
       run: |
@@ -141,6 +158,14 @@ jobs:
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Restore source download cache
+      uses: actions/cache/restore@v5
+      with:
+        path: /workdir/openwrt/dl
+        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+        restore-keys: |
+          dl-${{ env.REPO_BRANCH }}-
 
     - name: Restore ccache
       uses: actions/cache/restore@v5
@@ -206,6 +231,13 @@ jobs:
         df -hT .
         echo "======================="
 
+    - name: Save source download cache
+      uses: actions/cache/save@v5
+      if: '!cancelled()'
+      with:
+        path: /workdir/openwrt/dl
+        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+
     - name: Compile the firmware
       id: compile
       working-directory: openwrt
@@ -235,7 +267,7 @@ jobs:
         path: ~/.ccache
         key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
 
-    - name: Organize firmware files
+    - name: Organize files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && success()
       run: |
