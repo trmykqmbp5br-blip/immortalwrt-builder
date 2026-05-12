@@ -165,24 +165,23 @@ flash_router() {
     echo "====================== 上传固件到路由器 ======================"
 
     local firmware="$1"
+    local backup="$2"
+
     local fw_name=$(basename "$firmware")
     local remote_fw="/tmp/$fw_name"
 
     scp -i "$SSH_KEY" $SSH_OPTS "$firmware" "root@$ROUTER_IP:$remote_fw" 2>&1
     info "固件已上传到路由器"
 
-    # 自动查找并上传备份文件
-    local backup=""
+    # 上传备份文件（如果指定）
     local remote_backup=""
-    BACKUP_DIR="${BACKUP_DIR:-$SCRIPT_DIR}"
-    backup=$(find "$BACKUP_DIR" -maxdepth 1 -name "immortalwrt-backup-*-with-pkgs.tar.gz" -print -quit 2>/dev/null || true)
     if [ -n "$backup" ] && [ -f "$backup" ]; then
         local bk_name=$(basename "$backup")
         remote_backup="/tmp/$bk_name"
         scp -i "$SSH_KEY" $SSH_OPTS "$backup" "root@$ROUTER_IP:$remote_backup" 2>&1
         info "备份已上传: $bk_name"
     else
-        warn "未找到备份文件 immortalwrt-backup-*-with-pkgs.tar.gz，将不保留配置"
+        warn "未指定备份文件，刷机后配置将丢失"
     fi
 
     echo ""
@@ -247,24 +246,25 @@ main() {
             ;;
         3)
             download_firmware ""
-            flash_router "$FIRMWARE_FILE"
+            flash_router "$FIRMWARE_FILE" "$BACKUP_PATH"
             ;;
         4)
             echo -n "固件文件路径: "
             read -r FW_PATH
-            if [ -f "$FW_PATH" ]; then
-                flash_router "$FW_PATH"
-            else
+            if [ ! -f "$FW_PATH" ]; then
                 error "文件不存在: $FW_PATH"
                 exit 1
             fi
+            echo -n "备份文件路径 (留空跳过): "
+            read -r BACKUP_PATH
+            flash_router "$FW_PATH" "$BACKUP_PATH"
             ;;
         1|*)
             ROOTFS="${1:-4096}"
             trigger_build "$ROOTFS"
             wait_build
             download_firmware "$RUN_ID"
-            flash_router "$FIRMWARE_FILE"
+            flash_router "$FIRMWARE_FILE" "$BACKUP_PATH"
             ;;
     esac
 }
