@@ -33,7 +33,7 @@ patch_ia32_emulation "target/linux/x86/64/config-6.6"
 # 格式: OPTION=VALUE（VALUE=disabled 表示禁用该选项）
 for KERNEL_CONFIG in target/linux/x86/config-6.6 target/linux/x86/64/config-6.6; do
     [ -f "$KERNEL_CONFIG" ] || continue
-    for entry in NET_9P_XEN=disabled ARCH_MMAP_RND_COMPAT_BITS=8; do
+    for entry in NET_9P_XEN=disabled ARCH_MMAP_RND_COMPAT_BITS=8 XFRM_USER_COMPAT=disabled; do
         opt="${entry%%=*}"
         val="${entry#*=}"
         if [ "$val" = "disabled" ]; then
