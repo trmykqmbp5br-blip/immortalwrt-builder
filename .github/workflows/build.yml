@@ -142,19 +142,6 @@ jobs:
         cd openwrt
         timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: Save runtime tarballs
-      working-directory: openwrt
-      run: |
-        if [ -f files/lib/ld-musl-i386.so.1 ] || [ -f files/lib/ld-linux.so.2 ]; then
-          mkdir -p $GITHUB_WORKSPACE/runtime
-          $GITHUB_WORKSPACE/scripts/build-runtime-tarballs.sh
-          echo "=== 运行时 tarball ==="
-          ls -lh $GITHUB_WORKSPACE/runtime/ 2>/dev/null || true
-        else
-          echo "(no 32-bit runtime extracted, skipping tarball)"
-        fi
-
-
     - name: Download all sources
       working-directory: openwrt
       run: |
@@ -209,7 +196,6 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        cp "$GITHUB_WORKSPACE"/runtime/*.tar.gz . 2>/dev/null || true
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -221,9 +207,7 @@ jobs:
       with:
         tag_name: immortalwrt-24.10.6-${{ github.run_number }}
         body_path: release.txt
-        files: |
-          ${{ env.FIRMWARE }}/*squashfs-combined-efi.img.gz
-          ${{ env.FIRMWARE }}/*.tar.gz
+        files: ${{ env.FIRMWARE }}/*squashfs-combined-efi.img.gz
 
     - name: Remove old Releases
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
