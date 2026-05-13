@@ -29,22 +29,23 @@ patch_ia32_emulation() {
 patch_ia32_emulation "target/linux/x86/config-6.6"
 patch_ia32_emulation "target/linux/x86/64/config-6.6"
 
-# 补充内核新增选项，避免 syncconfig 交互式询问导致编译失败
+# 统一预设内核选项，避免 syncconfig 交互式询问导致编译失败
+# 格式: OPTION=VALUE（VALUE=disabled 表示禁用该选项）
 for KERNEL_CONFIG in target/linux/x86/config-6.6 target/linux/x86/64/config-6.6; do
     [ -f "$KERNEL_CONFIG" ] || continue
-    for opt in CONFIG_NET_9P_XEN; do
-        if ! grep -q "^# $opt is not set$\|^$opt=" "$KERNEL_CONFIG" 2>/dev/null; then
-            echo "# $opt is not set" >> "$KERNEL_CONFIG"
-            echo "  $opt disabled ($KERNEL_CONFIG)"
-        fi
-    done
-    # IA32_EMULATION → COMPAT 相关新选项，避免 syncconfig 交互式询问
-    for opt in CONFIG_ARCH_MMAP_RND_COMPAT_BITS:8; do
-        opt_name="${opt%%:*}"
-        opt_val="${opt##*:}"
-        if ! grep -q "^$opt_name=" "$KERNEL_CONFIG" 2>/dev/null; then
-            echo "$opt_name=$opt_val" >> "$KERNEL_CONFIG"
-            echo "  $opt_name=$opt_val ($KERNEL_CONFIG)"
+    for entry in NET_9P_XEN=disabled ARCH_MMAP_RND_COMPAT_BITS=8; do
+        opt="${entry%%=*}"
+        val="${entry#*=}"
+        if [ "$val" = "disabled" ]; then
+            if ! grep -q "^# $opt is not set$\|^$opt=" "$KERNEL_CONFIG" 2>/dev/null; then
+                echo "# $opt is not set" >> "$KERNEL_CONFIG"
+                echo "  $opt disabled ($KERNEL_CONFIG)"
+            fi
+        else
+            if ! grep -q "^$opt=" "$KERNEL_CONFIG" 2>/dev/null; then
+                echo "$opt=$val" >> "$KERNEL_CONFIG"
+                echo "  $opt=$val ($KERNEL_CONFIG)"
+            fi
         fi
     done
 done

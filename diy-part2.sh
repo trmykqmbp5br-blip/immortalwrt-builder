@@ -14,7 +14,7 @@ sed -i 's/.*CONFIG_PACKAGE_luci-app-fchomo.*/# CONFIG_PACKAGE_luci-app-fchomo is
 # 2. 修复 Kconfig 层面的自引用递归依赖
 #    (luci-app-fchomo 的 Makefile 有 "depends on PACKAGE_luci-app-fchomo")
 for makefile in package/feeds/*/*/luci-app-fchomo/Makefile; do
-    [ -f "$makefile" ] && sed -i 's/depends on.*PACKAGE_luci-app-fchomo/depends on PACKAGE_libopenssl/' "$makefile" && \
+    [ -f "$makefile" ] && sed -i 's/depends on.*PACKAGE_luci-app-fchomo/depends on +PACKAGE_luci-app-fchomo/' "$makefile" && \
         echo "  Fixed fchomo recursive dependency in $makefile"
 done
 

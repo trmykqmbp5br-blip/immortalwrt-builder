@@ -57,7 +57,7 @@ if [ "$count" -eq 1 ]; then
     uci delete network.lan.netmask
     uci delete network.lan.gateway
     uci delete network.lan.dns
-    uci commit network
+    uci commit network || STATUS=1
 
     # 单网口必须开放 WAN 防火墙才能访问 WebUI（VM 场景）
     uci set firewall.@zone[1].input='ACCEPT'
@@ -118,7 +118,7 @@ elif [ "$count" -gt 1 ]; then
 
     echo "Multi-NIC mode: WAN firewall remains at default (REJECT)" >>$LOGFILE
 
-    uci commit network
+    uci commit network || STATUS=1
 
     # 第二 WAN (wanb)
     wanb_ifname=$(echo "$ifnames" | awk '{print $2}')
@@ -151,8 +151,8 @@ elif [ "$count" -gt 1 ]; then
         uci add_list firewall.@zone[-1].network='wanb'
         uci add_list firewall.@zone[-1].network='wanb_6'
 
-        uci commit network
-        uci commit firewall
+        uci commit network || STATUS=1
+        uci commit firewall || STATUS=1
 
         if command -v mwan3 >/dev/null 2>&1; then
             echo "mwan3 detected, using pre-built config from /etc/config/mwan3" >>$LOGFILE
@@ -163,7 +163,7 @@ fi
 # Docker 防火墙
 if command -v dockerd >/dev/null 2>&1; then
     echo "Docker detected, configuring kernel parameters..." >>$LOGFILE
-    sysctl -w net.bridge.bridge-nf-call-iptables=1 >>$LOGFILE 2>&1
+    sysctl -w net.bridge.bridge-nf-call-iptables=1 >>$LOGFILE 2>&1 || STATUS=1
     grep -q 'bridge-nf-call-iptables' /etc/sysctl.conf 2>/dev/null || \
         echo 'net.bridge.bridge-nf-call-iptables=1' >> /etc/sysctl.conf
 
@@ -193,7 +193,7 @@ if command -v dockerd >/dev/null 2>&1; then
     uci set firewall.@forwarding[-1].src='lan'
     uci set firewall.@forwarding[-1].dest='docker'
 
-    uci commit firewall
+    uci commit firewall || STATUS=1
     fi
 else
     echo "Docker not detected, skipping firewall configuration." >>$LOGFILE
