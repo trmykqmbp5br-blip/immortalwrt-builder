@@ -37,6 +37,8 @@ jobs:
 
     steps:
     - name: Prepare environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
         echo "=== 释放磁盘空间 ==="
         sudo rm -rf /opt/hostedtoolcache /usr/share/dotnet /usr/local/lib/android /usr/local/share/powershell /usr/local/.ghcup /usr/local/julia* /opt/ghc
@@ -48,9 +50,6 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-        export TMPDIR=$RUNNER_TEMP
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
         timeout 120 sudo apt-get update -y || {
           echo "apt-get update timeout, retrying..."
           timeout 120 sudo apt-get update -y
