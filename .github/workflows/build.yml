@@ -30,8 +30,6 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -156,7 +154,7 @@ jobs:
         fi
 
     - name: Upload runtime tarballs (artifacts)
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: '!cancelled()'
       with:
         name: runtime-tarballs
@@ -174,13 +172,6 @@ jobs:
         echo "=== 下载后磁盘状态 ==="
         df -hT .
         echo "======================="
-
-    - name: Save dl cache
-      uses: actions/cache/save@v5
-      if: '!cancelled()'
-      with:
-        path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}
 
     - name: Compile the firmware
       id: compile
@@ -205,6 +196,7 @@ jobs:
       run: df -hT
 
     - name: Save ccache
+      continue-on-error: true
       uses: actions/cache/save@v5
       if: '!cancelled()'
       with:
@@ -221,7 +213,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@437e073e786973c6b6af97d9e445c41ae43b1d29 # master (node24)
       if: env.UPLOAD_RELEASE == 'true' && success()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
