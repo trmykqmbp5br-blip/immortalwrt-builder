@@ -87,7 +87,6 @@ apply_custom_packages() {
             sed -i "s/.*CONFIG_PACKAGE_${pkg_name}=y/# CONFIG_PACKAGE_${pkg_name} is not set/" .config 2>/dev/null || true
         else
             # 校验: 检查 feeds 或 base 中是否存在该包的 Makefile
-            local pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
             local found=false
             for try_path in "package/feeds/*/$pkg/Makefile" "package/$pkg/Makefile"; do
                 for f in $try_path; do
@@ -102,10 +101,11 @@ apply_custom_packages() {
             fi
 
             echo "  启用: $pkg"
-            if grep -q "CONFIG_PACKAGE_${pkg_conf}[= ]" .config 2>/dev/null; then
-                sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}=y/" .config
+            # .config 中用连字符（如 CONFIG_PACKAGE_luci-app-openclash=y），不转下划线
+            if grep -q "CONFIG_PACKAGE_${pkg}[= ]" .config 2>/dev/null; then
+                sed -i "s/.*CONFIG_PACKAGE_${pkg}.*/CONFIG_PACKAGE_${pkg}=y/" .config
             else
-                echo "CONFIG_PACKAGE_${pkg_conf}=y" >> .config
+                echo "CONFIG_PACKAGE_${pkg}=y" >> .config
             fi
         fi
     done
