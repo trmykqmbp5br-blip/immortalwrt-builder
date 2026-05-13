@@ -154,14 +154,6 @@ jobs:
           echo "(no 32-bit runtime extracted, skipping tarball)"
         fi
 
-    - name: Upload runtime tarballs (artifacts)
-      uses: actions/upload-artifact@v7
-      if: '!cancelled()'
-      with:
-        name: runtime-tarballs
-        path: runtime/
-        retention-days: 7
-        if-no-files-found: ignore
 
     - name: Download all sources
       working-directory: openwrt
@@ -217,6 +209,7 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
+        cp "$GITHUB_WORKSPACE"/runtime/*.tar.gz . 2>/dev/null || true
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -228,7 +221,9 @@ jobs:
       with:
         tag_name: immortalwrt-24.10.6-${{ github.run_number }}
         body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*squashfs-combined-efi.img.gz
+        files: |
+          ${{ env.FIRMWARE }}/*squashfs-combined-efi.img.gz
+          ${{ env.FIRMWARE }}/*.tar.gz
 
     - name: Remove old Releases
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
