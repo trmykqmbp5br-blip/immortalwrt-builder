@@ -1,11 +1,7 @@
 #!/bin/bash
-# custom-packages.sh — 第三方软件包选择
-#
-# 以下列出了可集成到固件的第三方软件。
-# 取消注释即可启用对应软件，使用减号前缀 "-" 可排除已选中的包。
-#
-# 注意: 源码编译模式下，大部分包来自 kenzo/small feeds(在 diy-part1.sh 中启用)。
-#       少数仅提供二进制 ipk 的包(如 istore) 通过 prepare-store.sh 处理。
+# custom-packages.sh — 第三方软件包选择 + 应用
+# 由 diy-part2.sh source 调用，CWD = openwrt/
+# 设置 CUSTOM_PACKAGES 变量，定义 apply_custom_packages() 写入 .config
 
 # ==================== 代理/VPN 类 ====================
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-openclash"
@@ -63,3 +59,55 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-argon luci-app-argon-config luci-i1
 # 启用 istore 需要同步勾选 workflow 中的 enable_store 选项
 # 此处仅作占位，实际由 prepare-store.sh 处理
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"
+
+# ================================================================
+# apply_custom_packages — 校验并写入 CUSTOM_PACKAGES 到 .config
+# CWD = openwrt/，.config 应已存在
+# ================================================================
+apply_custom_packages() {
+    local pkg_list="$CUSTOM_PACKAGES"
+
+    # -- 预处理: store 包 —
+    if echo "$pkg_list" | grep -q "luci-app-store"; then
+        if [ -f "$REPO_ROOT/shell/prepare-store.sh" ]; then
+            . "$REPO_ROOT/shell/prepare-store.sh"
+            prepare_store_packages "files" "$pkg_list"
+            pkg_list=$(echo "$pkg_list" | sed 's/luci-app-store//g' | xargs)
+        fi
+    fi
+
+    [ -z "$pkg_list" ] && return
+
+    echo "=== 启用第三方软件包 ==="
+    for pkg in $pkg_list; do
+        if echo "$pkg" | grep -q '^-'; then
+            # 排除项
+            pkg_name=$(echo "$pkg" | sed 's/^-//')
+            echo "  排除: $pkg_name"
+            sed -i "s/.*CONFIG_PACKAGE_${pkg_name}=y/# CONFIG_PACKAGE_${pkg_name} is not set/" .config 2>/dev/null || true
+        else
+            # 校验: 检查 feeds 或 base 中是否存在该包的 Makefile
+            local pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
+            local found=false
+            for try_path in "package/feeds/*/$pkg/Makefile" "package/$pkg/Makefile"; do
+                for f in $try_path; do
+                    [ -f "$f" ] && { found=true; break; }
+                done
+                $found && break
+            done
+
+            if ! $found; then
+                echo "  WARNING: $pkg 在 feeds 中未找到，跳过"
+                continue
+            fi
+
+            echo "  启用: $pkg"
+            if grep -q "CONFIG_PACKAGE_${pkg_conf}[= ]" .config 2>/dev/null; then
+                sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}=y/" .config
+            else
+                echo "CONFIG_PACKAGE_${pkg_conf}=y" >> .config
+            fi
+        fi
+    done
+    echo "=== 第三方包处理完毕 ==="
+}

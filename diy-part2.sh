@@ -38,39 +38,9 @@ fi
 
 # ============= 6. 第三方自定义软件包 =============
 CUSTOM_PACKAGES=""
-
 if [ -f "$REPO_ROOT/shell/custom-packages.sh" ]; then
     . "$REPO_ROOT/shell/custom-packages.sh"
-fi
-
-# 处理 store .run 包
-if [ -n "$CUSTOM_PACKAGES" ] && echo "$CUSTOM_PACKAGES" | grep -q "luci-app-store"; then
-    if [ -f "$REPO_ROOT/shell/prepare-store.sh" ]; then
-        . "$REPO_ROOT/shell/prepare-store.sh"
-        prepare_store_packages "files" "$CUSTOM_PACKAGES"
-        CUSTOM_PACKAGES=$(echo "$CUSTOM_PACKAGES" | sed 's/luci-app-store//g' | xargs)
-    fi
-fi
-
-# 写入 .config
-if [ -n "$CUSTOM_PACKAGES" ]; then
-    echo "=== 启用第三方软件包 ==="
-    for pkg in $CUSTOM_PACKAGES; do
-        if echo "$pkg" | grep -q '^-'; then
-            pkg_name=$(echo "$pkg" | sed 's/^-//')
-            echo "  排除: $pkg_name"
-            sed -i "s/.*CONFIG_PACKAGE_${pkg_name}=y/# CONFIG_PACKAGE_${pkg_name} is not set/" .config 2>/dev/null || true
-        else
-            echo "  启用: $pkg"
-            pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
-            if grep -q "CONFIG_PACKAGE_${pkg_conf}[= ]" .config 2>/dev/null; then
-                sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}=y/" .config
-            else
-                echo "CONFIG_PACKAGE_${pkg_conf}=y" >> .config
-            fi
-        fi
-    done
-    echo "=== 第三方包处理完毕 ==="
+    apply_custom_packages
 fi
 
 echo "=== diy-part2.sh 完成 ==="
