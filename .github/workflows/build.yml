@@ -95,19 +95,26 @@ jobs:
           ccache-${{ env.REPO_BRANCH }}-
           ccache-
 
-    - name: Configure
+    - name: Configure feeds
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        timeout 60 $GITHUB_WORKSPACE/$DIY_P1_SH
+        timeout 600 bash -c './scripts/feeds update -a'
+
+    - name: Install feeds
+      run: timeout 600 bash -c 'cd openwrt && ./scripts/feeds install -a'
+
+    - name: Apply custom config
       env:
         INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
         ROOTFS_SIZE: ${{ github.event.inputs.rootfs_size }}
       run: |
-        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         [ -e files ] && mv files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P1_SH $DIY_P2_SH
+        chmod +x $DIY_P2_SH
         cd openwrt
-        timeout 60 $GITHUB_WORKSPACE/$DIY_P1_SH
-        timeout 600 bash -c './scripts/feeds update -a'
-        timeout 600 bash -c './scripts/feeds install -a'
         timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: Download sources
@@ -160,7 +167,14 @@ jobs:
           --repo ${{ github.repository }} \
           --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
           --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          ./*squashfs-combined-efi.img.gz
+          ./*squashfs-combined-efi.img.gz \
+          ./*.manifest \
+          ./*.bom.cdx.json \
+          ./*.kernel.bin \
+          ./sha256sums \
+          ./config.buildinfo \
+          ./feeds.buildinfo \
+          ./profiles.json
         echo "=== 清理旧 Release ==="
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +4 \
