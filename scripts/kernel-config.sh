@@ -34,6 +34,7 @@ patch_ia32_emulation "target/linux/x86/64/config-6.6"
 patch_kernel_defaults_olddefconfig() {
     local MK="$1"
     [ -f "$MK" ] || { echo "WARNING: $MK not found, olddefconfig injection skipped"; return; }
+    command -v python3 >/dev/null 2>&1 || { echo "WARNING: python3 not found, olddefconfig injection skipped"; return; }
 
     if grep -q "^	\$(KERNEL_MAKE) olddefconfig" "$MK" 2>/dev/null; then
         echo "  olddefconfig already patched in $MK"
