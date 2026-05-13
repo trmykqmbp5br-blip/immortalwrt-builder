@@ -101,6 +101,49 @@ run-i386 /path/to/32bit-binary [args...]
 
 直接执行 32 位动态链接程序会因加载到 64 位 .so 而失败。
 
+### 运行时 tarball 维护
+
+32 位运行时库已压缩为 tarball 提交在 `runtime/` 目录，构建脚本自动检测并使用。**升级 ImmortalWrt 版本时需要重新生成。**
+
+生成方式：在 GitHub Actions ubuntu-22.04 运行环境中执行：
+
+```bash
+# 1. 克隆你要升级的目标版本
+git clone https://github.com/immortalwrt/immortalwrt -b <新版本> /tmp/openwrt
+cd /tmp/openwrt
+
+# 2. 下载 i386 rootfs（用于 musl 32 位库）
+wget https://downloads.immortalwrt.org/releases/<新版本>/targets/x86/64/immortalwrt-<新版本>-x86-64-generic-rootfs.tar.gz
+mkdir -p i386-rootfs && cd i386-rootfs
+wget https://downloads.immortalwrt.org/releases/<新版本>/targets/x86/generic/immortalwrt-<新版本>-x86-generic-rootfs.tar.gz
+tar -xzf immortalwrt-*-x86-generic-rootfs.tar.gz
+# 提取 musl 32 位文件
+mkdir -p musl32
+cp -a lib/ld-musl-i386.so.1 musl32/
+cp -a usr/lib/libgcc_s*.so* musl32/
+# ...（完整提取逻辑参考 scripts/runtime-musl32.sh）
+
+# 3. 生成 glibc 32 位库（从 Ubuntu 22.04 i386 环境复制）
+# 参考 scripts/runtime-glibc32.sh
+
+# 4. 打包
+cd musl32 && tar -czf musl32.tar.gz *
+cd glibc32 && tar -czf glibc32.tar.gz *
+
+# 5. 替换仓库中的旧文件
+cp musl32.tar.gz runtime/
+cp glibc32.tar.gz runtime/
+```
+
+推荐做法：直接运行 CI 构建一次（不提交 tarball），从构建产物 Artifacts 下载 `runtime-tarballs`，解压后覆盖 `runtime/` 目录。构建时 `scripts/runtime-musl32.sh` 和 `scripts/runtime-glibc32.sh` 会自动从新版本 i386 rootfs 提取最新的 32 位库。
+
+**路径对照：**
+
+| 文件 | 仓库路径 | 固件路径 | 来源 |
+|------|---------|---------|------|
+| musl 32-bit tarball | `runtime/musl32.tar.gz` | → `/lib/ld-musl-i386.so.1`, `/lib32/*.so` | ImmortalWrt i386 rootfs |
+| glibc 32-bit tarball | `runtime/glibc32.tar.gz` | → `/lib/ld-linux.so.2`, `/lib32/glibc/*.so` | Ubuntu 22.04 i386 |
+
 ## 优化说明
 
 - 禁用 BTF 调试信息（加速编译，减小内核体积）
