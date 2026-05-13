@@ -103,6 +103,7 @@ jobs:
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
     - name: Restore dl cache
+      id: restore-dl
       uses: actions/cache/restore@v5
       with:
         path: /workdir/openwrt/dl
@@ -172,6 +173,13 @@ jobs:
         echo "=== 下载后磁盘状态 ==="
         df -hT .
         echo "======================="
+
+    - name: Save dl cache (miss only)
+      uses: actions/cache/save@v5
+      if: steps.restore-dl.outputs.cache-hit != 'true'
+      with:
+        path: /workdir/openwrt/dl
+        key: dl-${{ env.REPO_BRANCH }}
 
     - name: Compile the firmware
       id: compile
