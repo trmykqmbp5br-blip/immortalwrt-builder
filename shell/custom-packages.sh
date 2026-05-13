@@ -8,7 +8,7 @@
 #       少数仅提供二进制 ipk 的包(如 istore) 通过 prepare-store.sh 处理。
 
 # ==================== 代理/VPN 类 ====================
-# 注意: 你不需要 OpenClash，以下代理选项仅供参考
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-openclash"
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-passwall-zh-cn"
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-homeproxy-zh-cn"
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-ssr-plus luci-i18n-ssr-plus-zh-cn"
@@ -19,13 +19,13 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-diskman-zh-cn"
 # 文件管理器 (浏览器内管理文件)
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-filemanager-zh-cn"
 # 网页终端 ttyd
-CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-ttyd-zh-cn"
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-ttyd luci-i18n-ttyd-zh-cn"
 # SFTP 服务器 (方便传文件)
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES openssh-sftp-server"
 # DDNS 动态域名
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-ddns-zh-cn ddns-scripts-aliyun"
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-ddns-zh-cn ddns-scripts-aliyun ddns-scripts"
 # ACME 证书管理
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-acme-zh-cn"
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-acme-zh-cn luci-app-acme acme acme-acmesh acme-acmesh-dnsapi"
 # Aria2 下载器
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-aria2-zh-cn"
 # socat (端口转发)
@@ -36,6 +36,8 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES iperf3"
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-irqbalance-zh-cn"
 # UPnP
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-upnp-zh-cn"
+# 网络工具
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES speedtest-go tcpdump"
 
 # ==================== 主题 ====================
 # Argon 主题 + 配置
@@ -60,4 +62,4 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-argon luci-app-argon-config luci-i1
 # ==================== ISTORE 商店 (需二进制 ipk) ====================
 # 启用 istore 需要同步勾选 workflow 中的 enable_store 选项
 # 此处仅作占位，实际由 prepare-store.sh 处理
-#CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-store"
