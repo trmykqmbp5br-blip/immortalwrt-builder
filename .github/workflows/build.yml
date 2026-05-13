@@ -90,7 +90,7 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('shell/custom-packages.sh', 'diy-part2.sh') }}
         restore-keys: |
           ccache-${{ env.REPO_BRANCH }}-
           ccache-
@@ -154,7 +154,7 @@ jobs:
       if: steps.restore-ccache.outputs.cache-hit != 'true'
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('shell/custom-packages.sh', 'diy-part2.sh') }}
 
     - name: Organize & Release
       if: env.UPLOAD_RELEASE == 'true' && success()
