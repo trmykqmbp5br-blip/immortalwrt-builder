@@ -35,7 +35,16 @@ for KERNEL_CONFIG in target/linux/x86/config-6.6 target/linux/x86/64/config-6.6;
     for opt in CONFIG_NET_9P_XEN; do
         if ! grep -q "^# $opt is not set$\|^$opt=" "$KERNEL_CONFIG" 2>/dev/null; then
             echo "# $opt is not set" >> "$KERNEL_CONFIG"
-            echo "$opt disabled ($KERNEL_CONFIG)"
+            echo "  $opt disabled ($KERNEL_CONFIG)"
+        fi
+    done
+    # IA32_EMULATION → COMPAT 相关新选项，避免 syncconfig 交互式询问
+    for opt in CONFIG_ARCH_MMAP_RND_COMPAT_BITS:8; do
+        opt_name="${opt%%:*}"
+        opt_val="${opt##*:}"
+        if ! grep -q "^$opt_name=" "$KERNEL_CONFIG" 2>/dev/null; then
+            echo "$opt_name=$opt_val" >> "$KERNEL_CONFIG"
+            echo "  $opt_name=$opt_val ($KERNEL_CONFIG)"
         fi
     done
 done
