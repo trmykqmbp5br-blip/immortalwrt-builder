@@ -38,9 +38,24 @@ fi
 
 # ============= 6. 第三方自定义软件包 =============
 CUSTOM_PACKAGES=""
+BINARY_PACKAGES=""
 if [ -f "$REPO_ROOT/shell/custom-packages.sh" ]; then
     . "$REPO_ROOT/shell/custom-packages.sh"
     apply_custom_packages
+fi
+
+# ============= 7. 二进制 ipk 注入 =============
+if [ -f "$REPO_ROOT/shell/prepare-binary.sh" ]; then
+    . "$REPO_ROOT/shell/prepare-binary.sh"
+    prepare_binary_packages "$REPO_ROOT/files" "$BINARY_PACKAGES"
+fi
+
+# ============= 8. ISTORE 商店（二进制 .run 包） =============
+if echo "$BINARY_PACKAGES" | grep -q "luci-app-store"; then
+    if [ -f "$REPO_ROOT/shell/prepare-store.sh" ]; then
+        . "$REPO_ROOT/shell/prepare-store.sh"
+        prepare_store_packages "$REPO_ROOT/files" "$BINARY_PACKAGES"
+    fi
 fi
 
 echo "=== diy-part2.sh 完成 ==="
