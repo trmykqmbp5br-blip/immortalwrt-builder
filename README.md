@@ -1,10 +1,11 @@
-# ImmortalWrt Builder — 24.10.6 x86_64
+# ImmortalWrt Builder — 24.10.6 x86_64 (有线网关版)
 
-基于 P3TERX/Actions-OpenWrt 模板，为 Intel J5040 软路由定制的 ImmortalWrt 24.10.6 固件。
+基于 P3TERX/Actions-OpenWrt 模板，为 Intel J5040 软路由定制的 ImmortalWrt 24.10.6 固件。**纯有线网关，无 WiFi 模块。**
 
 ## 固件特性
 
 - ImmortalWrt 24.10.6 x86_64 (kernel 6.6, LLVM 编译)
+- 纯有线网关，已移除所有 WiFi 驱动/固件（ath/mt76/b43/wl 等）
 - IA32_EMULATION（32 位应用支持，musl + glibc 双运行时）
 - 网卡驱动: igc (I225/I226) + e1000e, igb, ixgbe, r8125, r8168, vmxnet3, USB 网卡等
 - mwan3 双 WAN 负载均衡（自动检测网口数 ≥2 时启用）
