@@ -34,6 +34,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 540
 
     steps:
     - name: Prepare environment
@@ -90,10 +91,9 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('shell/custom-packages.sh', 'diy-part2.sh') }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
         restore-keys: |
           ccache-${{ env.REPO_BRANCH }}-
-          ccache-
 
     - name: Configure feeds
       run: |
@@ -140,21 +140,26 @@ jobs:
         timeout 120 make defconfig
         echo "$(nproc) thread compile"
         if ! timeout 14400 make -j$(nproc) V=s; then
-          echo "Parallel build failed, retrying with single thread..."
-          timeout 28800 make -j1 V=s
+          echo "Parallel build failed, retrying once..."
+          if timeout 14400 make -j$(nproc) V=s; then
+            echo "Retry succeeded"
+          else
+            echo "Parallel build failed again, retrying with single thread..."
+            timeout 28800 make -j1 V=s
+          fi
         fi
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET_DEVICE_.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-    - name: Save ccache (miss only)
+    - name: Save ccache
       continue-on-error: true
       uses: actions/cache/save@v5
-      if: steps.restore-ccache.outputs.cache-hit != 'true'
+      if: always()
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('shell/custom-packages.sh', 'diy-part2.sh') }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
 
     - name: Organize & Release
       if: env.UPLOAD_RELEASE == 'true' && success()
@@ -181,9 +186,3 @@ jobs:
           | while read tag; do
               [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
             done
-
-    - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        retain_days: 0
-        keep_minimum_runs: 2
