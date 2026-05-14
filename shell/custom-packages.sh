@@ -33,6 +33,14 @@ BINARY_PACKAGES="$BINARY_PACKAGES speedtest-go tcpdump"
 # ==================== 主题 ====================
 BINARY_PACKAGES="$BINARY_PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
 
+# ==================== Docker ====================
+# Docker 全家桶全部二进制注入，避免 Go 源码编译耗时长 + 依赖断裂
+if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
+    BINARY_PACKAGES="$BINARY_PACKAGES docker dockerd containerd runc tini docker-compose"
+    BINARY_PACKAGES="$BINARY_PACKAGES luci-lib-docker luci-app-docker luci-i18n-docker-zh-cn"
+    BINARY_PACKAGES="$BINARY_PACKAGES luci-app-dockerman luci-i18n-dockerman-zh-cn"
+fi
+
 # ==================== 商店 ====================
 BINARY_PACKAGES="$BINARY_PACKAGES luci-app-store"
 

@@ -1,22 +1,15 @@
 #!/bin/bash
 # scripts/docker-toggle.sh — Docker 包开关
 # 由 diy-part2.sh source 调用，CWD = openwrt/
-# 根据 $INCLUDE_DOCKER 环境变量启用/禁用 Docker 包
+# Docker 已全部改为二进制 ipk 注入（见 shell/custom-packages.sh），
+# 这里只负责：.config 里禁用 Docker 编译（防止源码编译 + 避免依赖断裂）
+#
+# 二进制注入由 shell/custom-packages.sh 根据 $INCLUDE_DOCKER 控制。
 
-if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
-    echo "Enabling Docker packages..."
-    sed -i 's/.*CONFIG_PACKAGE_dockerd.*/CONFIG_PACKAGE_dockerd=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker.*/CONFIG_PACKAGE_docker=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker-compose.*/CONFIG_PACKAGE_docker-compose=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-lib-docker.*/CONFIG_PACKAGE_luci-lib-docker=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-docker.*/CONFIG_PACKAGE_luci-app-docker=y/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-dockerman.*/CONFIG_PACKAGE_luci-app-dockerman=y/' .config
-else
-    echo "Disabling Docker packages..."
-    sed -i 's/.*CONFIG_PACKAGE_dockerd.*/# CONFIG_PACKAGE_dockerd is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker .*/# CONFIG_PACKAGE_docker is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_docker-compose.*/# CONFIG_PACKAGE_docker-compose is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-lib-docker.*/# CONFIG_PACKAGE_luci-lib-docker is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-docker.*/# CONFIG_PACKAGE_luci-app-docker is not set/' .config
-    sed -i 's/.*CONFIG_PACKAGE_luci-app-dockerman.*/# CONFIG_PACKAGE_luci-app-dockerman is not set/' .config
-fi
+DOCKER_PKGS="dockerd docker docker-compose luci-lib-docker luci-app-docker luci-app-dockerman"
+
+for pkg in $DOCKER_PKGS; do
+    sed -i "s/.*CONFIG_PACKAGE_${pkg}.*/# CONFIG_PACKAGE_${pkg} is not set/" .config 2>/dev/null || true
+done
+
+echo "Docker: 已禁用 .config 编译（走二进制注入），INCLUDE_DOCKER=${INCLUDE_DOCKER:-yes}"

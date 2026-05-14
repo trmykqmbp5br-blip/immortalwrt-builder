@@ -54,6 +54,19 @@ resolve_pkg_url() {
         smartdns)
             echo "gh:pymumu/smartdns:smartdns\\.[0-9].*\\.${ARCH}-openwrt-all\\.ipk" ;;
 
+        # === Docker 全家桶（二进制注入，避免 Go 编译超时/依赖断裂） ===
+        docker)                     echo "feed:packages" ;;
+        dockerd)                    echo "feed:packages" ;;
+        containerd)                 echo "feed:packages" ;;
+        runc)                       echo "feed:packages" ;;
+        tini)                       echo "feed:packages" ;;
+        docker-compose)             echo "feed:packages" ;;
+        luci-lib-docker)            echo "feed:luci" ;;
+        luci-app-docker)            echo "feed:luci" ;;
+        luci-i18n-docker-zh-cn)     echo "feed:luci" ;;
+        luci-app-dockerman)         echo "feed:luci" ;;
+        luci-i18n-dockerman-zh-cn)  echo "feed:luci" ;;
+
         # === Store（由 prepare-store.sh 单独处理） ===
         luci-app-store)             echo "store" ;;
 
