@@ -91,9 +91,9 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('shell/custom-packages.sh', 'diy-part2.sh') }}
+        key: ccache-${{ env.REPO_BRANCH }}
         restore-keys: |
-          ccache-${{ env.REPO_BRANCH }}-
+          ccache-${{ env.REPO_BRANCH }}
 
     - name: Configure feeds
       run: |
@@ -139,9 +139,9 @@ jobs:
       working-directory: /workdir/openwrt
       run: |
         echo "$(nproc) thread compile"
-        if ! timeout 14400 make -j$(nproc) V=s; then
+        if ! GITHUB_ENV=/dev/null timeout 14400 make -j$(nproc) V=s; then
           echo "Parallel build failed, retrying with single thread..."
-          timeout 28800 make -j1 V=s
+          GITHUB_ENV=/dev/null timeout 28800 make -j1 V=s || exit $?
         fi
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -151,7 +151,7 @@ jobs:
       if: steps.restore-ccache.outputs.cache-hit != 'true'
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('shell/custom-packages.sh', 'diy-part2.sh') }}
+        key: ccache-${{ env.REPO_BRANCH }}
 
     - name: Organize & Release
       if: env.UPLOAD_RELEASE == 'true' && success()

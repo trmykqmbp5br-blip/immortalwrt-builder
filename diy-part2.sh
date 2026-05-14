@@ -58,4 +58,14 @@ if echo "$BINARY_PACKAGES" | grep -q "luci-app-store"; then
     fi
 fi
 
+# ============= 9. x86 镜像 boot 目录修复 =============
+# Build/combined 尝试从 staging_dir/boot/ 复制 config/System.map，
+# 但 Kernel/Install 未定义，该目录永远为空。
+# 改为直接从内核构建树复制。
+if [ -f "target/linux/x86/image/Makefile" ]; then
+    echo "=== 修复 x86 镜像 boot 目录源路径 ==="
+    python3 "$REPO_ROOT/shell/fix-x86-boot.py" "target/linux/x86/image/Makefile" || \
+        echo "  WARNING: x86 boot fix failed"
+fi
+
 echo "=== diy-part2.sh 完成 ==="

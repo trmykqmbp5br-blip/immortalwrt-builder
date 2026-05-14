@@ -74,7 +74,7 @@ download_gh_release() {
     local repo="$1"
     local pattern="$2"
     local output="$3"
-    local dl_url=$(curl -sL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null \
+    local dl_url=$(curl -sL "https://api.github.com/repos/${repo}/releases/latest?per_page=100" 2>/dev/null \
         | grep "browser_download_url" \
         | grep -E "$pattern" \
         | head -1 \
@@ -89,7 +89,7 @@ download_gh_binary() {
     local pattern="$2"
     local target_dir="$3"
     local tmpdir=$(mktemp -d)
-    local dl_url=$(curl -sL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null \
+    local dl_url=$(curl -sL "https://api.github.com/repos/${repo}/releases/latest?per_page=100" 2>/dev/null \
         | grep "browser_download_url" \
         | grep -E "$pattern" \
         | head -1 \
