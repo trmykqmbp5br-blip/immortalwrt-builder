@@ -115,7 +115,7 @@ jobs:
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         cd openwrt
         timeout 120 make defconfig
-        chmod +x $DIY_P2_SH
+        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
 
     - name: Download sources
