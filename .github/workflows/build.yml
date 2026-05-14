@@ -90,7 +90,7 @@ jobs:
       id: restore-ccache
       uses: actions/cache/restore@v5
       with:
-        path: ~/.ccache
+        path: /home/runner/.ccache
         key: ccache-${{ env.REPO_BRANCH }}
         restore-keys: |
           ccache-${{ env.REPO_BRANCH }}
@@ -137,7 +137,11 @@ jobs:
     - name: Compile the firmware
       id: compile
       working-directory: /workdir/openwrt
+      env:
+        CCACHE_DIR: /home/runner/.ccache
       run: |
+        mkdir -p "$CCACHE_DIR"
+        echo "ccache dir: $CCACHE_DIR ($(du -sh "$CCACHE_DIR" 2>/dev/null || echo 'empty'))"
         echo "$(nproc) thread compile"
         if ! GITHUB_ENV=/dev/null timeout 14400 make -j$(nproc) V=s; then
           echo "Parallel build failed, retrying with single thread..."
@@ -146,11 +150,10 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Save ccache
-      continue-on-error: true
       uses: actions/cache/save@v5
       if: steps.restore-ccache.outputs.cache-hit != 'true'
       with:
-        path: ~/.ccache
+        path: /home/runner/.ccache
         key: ccache-${{ env.REPO_BRANCH }}
 
     - name: Organize & Release
