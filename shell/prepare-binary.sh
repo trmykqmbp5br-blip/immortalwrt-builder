@@ -20,8 +20,8 @@ MIRROR_BASE="https://mirrors.ustc.edu.cn/immortalwrt/releases/${IMMORTALWRT_RELE
 # GitHub API 请求（带 GH_TOKEN 防限流）
 github_api_get() {
     local url="$1"
-    if [ -n "${GH_TOKEN:-}" ]; then
-        curl -sL -H "Authorization: Bearer $GH_TOKEN" "$url" 2>/dev/null
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        curl -sL -H "Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null
     else
         curl -sL "$url" 2>/dev/null
     fi
@@ -274,27 +274,43 @@ generate_boot_script() {
 
     cat > "$UCI_SCRIPT" << 'UCIEOF'
 #!/bin/sh
-# 99-install-ipk-cache.sh — 批量安装预置 ipk
+# 99-install-ipk-cache.sh — 安装预置 ipk
+# 优先使用 DAG 拓扑排序清单，按依赖顺序安装
 IPK_DIR="/etc/ipk-cache"
 LOG="/etc/config/ipk-install.log"
-MAX_RETRY=3
+ORDER_FILE="$IPK_DIR/install_order.list"
 [ -d "$IPK_DIR" ] || exit 0
 
-tries=0
-while [ $tries -lt $MAX_RETRY ]; do
-    echo "[$(date)] attempt $((tries+1))/$MAX_RETRY" >> "$LOG"
-    opkg install "$IPK_DIR"/*.ipk --force-reinstall --force-overwrite --force-depends >> "$LOG" 2>&1 && break
-    tries=$((tries + 1))
-done
+echo "=== Starting custom ipk installation ===" > "$LOG"
 
-if [ $tries -lt $MAX_RETRY ]; then
-    rm -f "$IPK_DIR"/*.ipk "$IPK_DIR"/.retry_count 2>/dev/null
-    echo "[$(date)] All ipk installed" >> "$LOG"
-    exit 0
+install_pkg() {
+    local ipk="$1"
+    [ -f "$ipk" ] || return 0
+    echo "$(date) Installing $(basename "$ipk")..." >> "$LOG"
+    opkg install "$ipk" --force-reinstall --force-overwrite --force-depends >> "$LOG" 2>&1
+}
+
+if [ -f "$ORDER_FILE" ]; then
+    echo "$(date) Installing via DAG order..." >> "$LOG"
+    while read -r ipk_name; do
+        [ -z "$ipk_name" ] && continue
+        install_pkg "$IPK_DIR/$ipk_name"
+    done < "$ORDER_FILE"
 else
-    echo "[$(date)] Failed after $MAX_RETRY attempts" >> "$LOG"
-    exit 1
+    echo "$(date) DAG not found, prefix fallback..." >> "$LOG"
+    for ipk in "$IPK_DIR"/*.ipk; do
+        case "$(basename "$ipk")" in luci-*) continue ;; esac
+        install_pkg "$ipk"
+    done
+    for ipk in "$IPK_DIR"/luci-app-*.ipk; do install_pkg "$ipk"; done
+    for ipk in "$IPK_DIR"/luci-theme-*.ipk; do install_pkg "$ipk"; done
+    for ipk in "$IPK_DIR"/luci-i18n-*.ipk; do install_pkg "$ipk"; done
+    for ipk in "$IPK_DIR"/luci-*.ipk; do install_pkg "$ipk"; done
 fi
+
+echo "$(date) Installation complete" >> "$LOG"
+rm -f "$IPK_DIR"/*.ipk "$ORDER_FILE"
+exit 0
 UCIEOF
     chmod +x "$UCI_SCRIPT"
     echo "  uci-defaults script created: $UCI_SCRIPT"

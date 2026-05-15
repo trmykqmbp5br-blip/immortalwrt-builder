@@ -54,6 +54,10 @@ if [ -d "$IPK_CACHE_DIR" ] && [ "$(ls "$IPK_CACHE_DIR"/*.ipk 2>/dev/null | wc -l
             control_data=$(ar p "$ipk_file" control.tar.xz 2>/dev/null | tar xJf - ./control -O 2>/dev/null)
 
         if [ -n "$control_data" ]; then
+            arch=$(echo "$control_data" | awk '/^Architecture:/{print $2}')
+            if [ -n "$arch" ] && [ "$arch" != "x86_64" ] && [ "$arch" != "all" ]; then
+                ERRORS+=("Package '${pkg_name}' has incompatible architecture '${arch}'. Expected x86_64 or all.")
+            fi
             deps=$(echo "$control_data" \
                 | awk '/^Depends:/{gsub(/Depends: /,""); print}' \
                 | tr ',' '\n' \

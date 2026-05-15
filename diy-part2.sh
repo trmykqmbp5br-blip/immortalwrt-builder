@@ -68,26 +68,32 @@ if [ -f "$REPO_ROOT/shell/prepare-binary.sh" ]; then
     prepare_binary_packages "$REPO_ROOT/files" "$BINARY_PACKAGES"
 fi
 
-# ============= 8. x86 镜像 boot 目录修复 =============
+# ============= 8. IPK 依赖拓扑排序 =============
+if [ -f "$SCRIPTS_DIR/sort-ipk-deps.py" ]; then
+    echo "=== IPK 依赖拓扑排序 ==="
+    python3 "$SCRIPTS_DIR/sort-ipk-deps.py" "$REPO_ROOT/files/etc/ipk-cache"
+fi
+
+# ============= 9. x86 镜像 boot 目录修复 =============
 if [ -f "target/linux/x86/image/Makefile" ]; then
     echo "=== 修复 x86 镜像 boot 目录源路径 ==="
     python3 "$REPO_ROOT/shell/fix-x86-boot.py" "target/linux/x86/image/Makefile" || \
         echo "  WARNING: x86 boot fix failed"
 fi
 
-# ============= 9. 校验 BINARY 包内核依赖 =============
+# ============= 11. 校验 BINARY 包内核依赖 =============
 if [ -f "$SCRIPTS_DIR/verify-kernel-deps.sh" ]; then
     echo "=== 校验 BINARY 包内核依赖 ==="
     bash "$SCRIPTS_DIR/verify-kernel-deps.sh" || exit 1
 fi
 
-# ============= 10. 校验 BINARY 包前后端一致性 =============
+# ============= 11. 校验 BINARY 包前后端一致性 =============
 if [ -f "$SCRIPTS_DIR/verify-pkg-consistency.sh" ]; then
     echo "=== 校验 BINARY 包前后端一致性 ==="
     bash "$SCRIPTS_DIR/verify-pkg-consistency.sh" || exit 1
 fi
 
-# ============= 10. 校验 BINARY 包前后端一致性 =============
+# ============= 11. 校验 BINARY 包前后端一致性 =============
 if [ -d package/ ]; then
     echo "=== 二次下载新增包源码 ==="
     make download -j$(nproc) 2>/dev/null || \
