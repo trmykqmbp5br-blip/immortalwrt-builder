@@ -24,9 +24,9 @@
 7. Install feeds          # ./scripts/feeds install -a
 8. Apply custom config    # diy-part2.sh（核心步骤，见下文）
 9. Download sources       # make download -j$(nproc)
-10. Save dl cache         # if: always() 失败也保存
+10. Save dl cache         # if: success() 构建成功才保存
 11. Compile firmware      # make -j$(nproc) V=s
-12. Save ccache           # if: always() 失败也保存
+12. ccache stats           # ccache -s + 超 6GB 清理
 13. Verify binary inject  # 检查 binary-manifest.json 的 skipped 包
 14. Release               # gh release create + 清理旧 Release
 ```
@@ -43,8 +43,8 @@ key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh
 restore-keys: |
   dl-${{ env.REPO_BRANCH }}-
 
-# 保存（无条件）
-if: always()
+# 保存（仅构建成功时）
+if: success()
 continue-on-error: true
 ```
 
@@ -55,21 +55,25 @@ continue-on-error: true
 ### ccache 缓存（编译缓存）
 
 ```yaml
-# .config 中必须设置
-CONFIG_CCACHE_DIR="/home/runner/.ccache"
+# key 含日期 + feeds 哈希，每天一份 + 变更感知
+# actions/cache@v4 单 action 自动恢复+保存（key 不存在时 job 结束自动保存）
+- name: Get date for ccache key
+  id: ccache-date
+  run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
 
-# 恢复
-key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
-restore-keys: |
-  ccache-${{ env.REPO_BRANCH }}-
-  ccache-${{ env.REPO_BRANCH }}
-
-# 保存（无条件）
-if: always()
-continue-on-error: true
+- name: ccache cache
+  uses: actions/cache@v4
+  with:
+    path: /home/runner/.ccache
+    key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+    restore-keys: |
+      ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-
+      ccache-${{ env.REPO_BRANCH }}-
 ```
 
-**关键**：OpenWrt 的 `rules.mk` 会 export `CCACHE_DIR`，覆盖环境变量。`.config` 中 `CONFIG_CCACHE_DIR` 为空时 → export `CCACHE_DIR=""` → ccache 使用 XDG 默认 `~/.cache/ccache`，与 GitHub cache action 路径不匹配。必须显式设为 `/home/runner/.ccache`。
+**关键**：OpenWrt 的 `rules.mk` 会 export `CCACHE_DIR`，覆盖环境变量。`.config` 中 `CONFIG_CCACHE_DIR` 为空时 → export `CCACHE_DIR=""` → ccache 使用 XDG 默认 `~/.cache/ccache`，与 GitHub cache action 路径不匹配。必须显式设为 `/home/runner/.ccache`（`diy-part2.sh` 在 make defconfig 之前注入）。
+
+同时 diy-part2.sh 开头设置 `CCACHE_MAXSIZE="5G"` 和 `CCACHE_COMPRESS="true"`，控制缓存大小并启用压缩。构建完后有 ccache stats 步骤输出统计 + 超 6GB 自动清理。
 
 ---
 
@@ -83,6 +87,8 @@ continue-on-error: true
 | `scripts/manifest-lib.sh` | `apply_manifest()` 写入 .config（禁用/启用） |
 | `shell/prepare-binary.sh` | 下载 ipk 到 `files/etc/ipk-cache/`，生成 uci-defaults 脚本 |
 | `diy-part2.sh` | 编排器，按序执行上述脚本 |
+| `package/custom-provides/Makefile` | PROVIDES 虚拟包，编译空包接管所有 BINARY 包的依赖请求 |
+| `scripts/binary-packages.sh` | BINARY 包扁平列表，被 diy-part1/diy-part2 共用 |
 
 ### 包分类
 
@@ -109,7 +115,7 @@ EXCLUDE 包 → ./scripts/config --disable → make 跳过编译
 SOURCE 包 → ./scripts/config --enable → make 正常编译
 ```
 
-使用 OpenWrt 官方 `scripts/config` 工具（精确 key 操作，无 sed 子串误伤）。
+使用 OpenWrt 官方 `scripts/config` 工具（精确 key 操作，无 sed 子串误伤）。同时自动启用 `CONFIG_PACKAGE_custom-binary-provides`（编译空包，PROVIDES 所有 BINARY 包），编译期依赖系统认为 BINARY 包已存在，避免 `depends on` 导致的编译中断。
 
 调用时机：必须在 make defconfig 之后执行，且之后绝不再执行 make defconfig。否则 Kconfig 引擎会根据 depends on/select 关系把 BINARY 包复活。
 
@@ -125,15 +131,22 @@ config-manifest.sh
   ├─ BINARY 清单 = smartdns luci-app-openclash docker ...
   └─ apply_manifest()  →  写入 .config（禁用所有 BINARY 包）
 
+diy-part1.sh
+  → ln -sf 链接 package/custom-provides/（PROVIDES 虚拟包）
+  → ./scripts/feeds update -a / install -a
+
 diy-part2.sh → kernel-config/runtime patches
-  → CCACHE_DIR 注入 .config
+  → CCACHE_DIR + CCACHE_MAXSIZE + CCACHE_COMPRESS 注入
   → make defconfig（OpenWrt 计算 Kconfig 依赖）
   → config-manifest.sh + apply_manifest()
-      ├─ scripts/config --disable（BINARY 包，精确 key，无 sed 误伤）
-      └─ scripts/config --enable（SOURCE 包）
+      ├─ scripts/config --disable（BINARY 包）
+      ├─ scripts/config --enable（SOURCE 包）
+      └─ scripts/config --enable CONFIG_PACKAGE_custom-binary-provides（虚拟包接管依赖）
   → prepare-binary.sh
       ├─ feed:packages smartdns → download_feed_pkg()
-      │   └─ curl USTC 镜像 → 下载 smartdns_*.ipk → files/etc/ipk-cache/
+      │   └─ curl USTC 镜像 Packages.gz
+      │   └─ awk 精确匹配 $1=="Package:" && $2==pkg，提取 Filename
+      │   └─ 下载 smartdns_*.ipk → files/etc/ipk-cache/
       ├─ gh:vernesong/OpenClash → download_gh_release()
       │   └─ GitHub API → 下载 luci-app-openclash_*.ipk → files/etc/ipk-cache/
       ├─ gh-bin: → download_gh_binary() → 解压 tar.gz 提取 ELF → files/usr/bin/
@@ -227,3 +240,6 @@ BINARY_SOURCE[包名]="gh-bin:owner/repo:pattern_regex:target_dir"
 OpenWrt 的 `rules.mk` 中 `export CCACHE_DIR:=$(CONFIG_CCACHE_DIR)` 覆盖了 GitHub Actions 设置的 `CCACHE_DIR` 环境变量。`.config` 中 `CONFIG_CCACHE_DIR=""` 时，export 为 `CCACHE_DIR=""` → ccache 使用 XDG 默认路径 `~/.cache/ccache`，但 GitHub cache action 保存的是 `/home/runner/.ccache` → 两者不匹配。
 
 修复：diy-part2.sh 在 make defconfig 之前注入 `CONFIG_CCACHE_DIR="/home/runner/.ccache"` 到 .config，make defconfig 保留已设值，确保 OpenWrt 内部 export 的路径与 cache action 一致。
+### 为什么需要 PROVIDES 虚拟包？
+
+BINARY 包被禁用（`.config` 中设为 not set）后，如果有其他编译的包 `depends on` 这个 BINARY 包，make 会报依赖断裂错误。`package/custom-provides/Makefile` 编译一个空包，通过 OpenWrt 的 PROVIDES 机制声明它提供所有 BINARY 包名。编译期依赖系统检查到该虚拟包已启用（`CONFIG_PACKAGE_custom-binary-provides=y`），就会认为 BINARY 包已存在，不再报错。实际运行时，BINARY 包通过开机 `opkg install --force-depends` 安装到系统中。
