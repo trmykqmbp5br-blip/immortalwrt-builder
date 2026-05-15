@@ -85,6 +85,40 @@ continue-on-error: true
 
 ---
 
+---
+
+## 32 位应用支持
+
+### 架构
+- 内核 `CONFIG_IA32_EMULATION=y`（x86 + x86_64 config-6.6 均已打补丁）
+- 预置 `musl 32-bit`（`/lib/ld-musl-i386.so.1` + `/lib32/*.so`）和 `glibc 32-bit`（`/lib/ld-linux.so.2` + `/lib32/glibc/*.so`）双运行时
+- 提供 `run-i386` 包装脚本，自动识别 musl/glibc 二进制并设置正确的 `LD_LIBRARY_PATH`
+
+### gh-bin 兼容性检查策略
+`check_gh_binary_deps()` 在提取 gh-bin 二进制后自动执行：
+
+| 架构 | 链接方式 | 结果 |
+|------|---------|------|
+| x86-64 | 静态 | ✅ 直接可用 |
+| x86-64 | musl 动态 | ✅ 直接可用 |
+| x86-64 | glibc 动态 | ❌ 阻断（musl 环境无法运行 64-bit glibc） |
+| i386 (32-bit) | 静态 | ✅ 直接可用 |
+| i386 (32-bit) | musl 动态 | ✅ musl32 runtime 兜底 |
+| i386 (32-bit) | glibc 动态 | ✅ glibc32 runtime 兜底（不阻断） |
+
+### 运行时维护
+构建时自动执行 `runtime-musl32.sh` 和 `runtime-glibc32.sh`，从 `runtime/*.tar.gz` 解压到 `files/` 目录，最终打包进固件 rootfs。
+
+升级 ImmortalWrt 版本时需要重新生成 tarball：
+- `runtime/musl32.tar.gz` — 从新版本 i386 rootfs 提取
+- `runtime/glibc32.tar.gz` — 从 Ubuntu 22.04 i386 环境提取
+- 或在 CI 中运行 `scripts/build-runtime-tarballs.sh` 自动生成
+
+### 维护注意事项
+- 32 位库与内核版本弱相关（取决于 musl/libc ABI），跨小版本升级通常兼容
+- 升级大版本（如 24.10 → 25.x）时**必须**重新生成 tarball，否则 32 位程序可能因 musl/glibc ABI 不兼容而崩溃
+- `files/usr/bin/run-i386` 脚本无需随版本更新，除非 musl/glibc 的 ld 路径发生变化
+
 ## 第三方包处理架构
 
 ### 核心文件

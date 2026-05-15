@@ -79,49 +79,63 @@ download_gh_release() {
 # check_gh_binary_deps — 检查 gh-bin 提取的二进制文件兼容性
 # ================================================================
 check_gh_binary_deps() {
-    local target_file="$1"
+    local file=$1
 
-    echo "[check] Verifying $target_file ..."
-
-    # 1. 检查是否为 ELF
-    if ! file "$target_file" 2>/dev/null | grep -q "ELF"; then
-        echo "[check] Not an ELF executable, skip dep check."
-        return
-    fi
-
-    # 2. 检查架构
-    if ! file "$target_file" | grep -q "x86-64"; then
-        echo "  ERROR: Binary is NOT x86-64! It will not run on target."
-        file "$target_file"
+    # 1. 确认是 ELF 文件
+    local elf_class=$(readelf -h "$file" 2>/dev/null | awk '/Class:/{print $2}')
+    if [ "$elf_class" != "ELF" ]; then
+        echo "[ERROR] Not an ELF file: $file"
         exit 1
     fi
 
-    # 3. 静态 vs 动态
-    if file "$target_file" | grep -q "statically linked"; then
-        echo "  [OK] Statically linked. No shared library deps."
-        return
-    fi
+    # 2. 提取架构
+    local elf_machine=$(readelf -h "$file" 2>/dev/null | awk '/Machine:/{print $0}')
+    local is_64bit=0
+    local is_32bit=0
 
-    # 动态链接: 检查 interpreter
-    local interpreter
-    interpreter=$(readelf -l "$target_file" 2>/dev/null | grep "interpreter" | grep -oP '\[.*?\]' | sed 's/[][]//g') || true
-    if echo "$interpreter" | grep -q "ld-linux"; then
-        echo "  ERROR: glibc binary (interpreter: $interpreter). ImmortalWrt uses musl!"
-        exit 1
-    elif echo "$interpreter" | grep -q "ld-musl"; then
-        echo "  [OK] musl binary ($interpreter)"
+    if echo "$elf_machine" | grep -q "X86-64"; then
+        is_64bit=1
+        echo "[INFO] Detected x86-64 ELF binary."
+    elif echo "$elf_machine" | grep -qE "80386|i386"; then
+        is_32bit=1
+        echo "[INFO] Detected i386 (32-bit) ELF binary. IA32_EMULATION + runtime required."
     else
-        echo "  [OK] interpreter: ${interpreter:-none}"
+        echo "[ERROR] Unsupported arch: $elf_machine. Only x86-64 and i386 allowed."
+        exit 1
     fi
 
-    # 4. NEEDED 库
-    local needed
-    needed=$(readelf -d "$target_file" 2>/dev/null | grep "NEEDED" | grep -oP '\[.*?\]' | sed 's/[][]//g') || true
-    if [ -n "$needed" ]; then
-        echo "  Requires shared libs:"
-        echo "$needed" | sed 's/^/    /'
-        echo "  Ensure these exist in firmware (/lib/, /usr/lib/)"
+    # 3. 检查链接方式
+    local dynamic=$(readelf -l "$file" 2>/dev/null | grep -c INTERP)
+    if [ "$dynamic" -eq 0 ]; then
+        echo "[INFO] Statically linked. Directly usable."
+        return 0
     fi
+
+    # 4. 动态链接 — interpreter 检查
+    local interp
+    interp=$(readelf -l "$file" 2>/dev/null | awk '/interpreter:/{gsub(/[\[\]]/,""); print $NF}')
+
+    if [ "$is_64bit" -eq 1 ]; then
+        if echo "$interp" | grep -q "ld-musl-x86_64"; then
+            echo "[INFO] 64-bit musl dynamic."
+        elif echo "$interp" | grep -qE "ld-linux-x86-64|ld-linux-x86"; then
+            echo "[ERROR] 64-bit glibc dynamic! ImmortalWrt uses musl, cannot run."
+            exit 1
+        fi
+    elif [ "$is_32bit" -eq 1 ]; then
+        if echo "$interp" | grep -qE "ld-musl-i386|ld-musl-x86"; then
+            echo "[INFO] 32-bit musl dynamic. musl32 runtime provides this."
+        elif echo "$interp" | grep -q "ld-linux"; then
+            echo "[INFO] 32-bit glibc dynamic. Will use glibc32 compatibility layer."
+        else
+            echo "[WARNING] Unknown 32-bit interpreter: $interp"
+        fi
+    fi
+
+    # 5. NEEDED 共享库清单
+    echo "[INFO] NEEDED shared libs (ensure in firmware's lib paths):"
+    readelf -d "$file" 2>/dev/null | awk '/NEEDED/{print "  - "$2}' | tr -d '[]'
+}
 }
 
 
