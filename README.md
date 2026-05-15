@@ -167,7 +167,7 @@ cp glibc32.tar.gz runtime/
 │   ├── kernel-config.sh            # IA32_EMULATION 内核补丁
 │   ├── runtime-musl32.sh           # musl 32 位运行时提取
 │   ├── runtime-glibc32.sh          # glibc 32 位运行时提取
-│   ├── docker-toggle.sh            # Docker 包开关
+│   ├── config-manifest.sh          # 统一包配置清单（source/binary/exclude）
 │   └── build-runtime-tarballs.sh   # 运行时 tarball 生成
 │
 ├── files/                          # 固件预置文件
@@ -177,7 +177,7 @@ cp glibc32.tar.gz runtime/
 │   └── usr/bin/run-i386            # 32 位程序运行包装器
 │
 ├── shell/
-│   ├── custom-packages.sh          # 第三方软件包选择
+│   ├── prepare-binary.sh           # 二进制 ipk 下载 + 注入
 │   └── prepare-store.sh            # iStore 二进制包处理
 │
 └── release.txt                     # Release 说明
