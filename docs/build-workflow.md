@@ -141,7 +141,7 @@ restore-keys: |
 | `scripts/manifest-lib.sh` | `apply_manifest()` 写入 .config（禁用/启用） |
 | `shell/prepare-binary.sh` | 下载 ipk 到 `files/etc/ipk-cache/`，生成 uci-defaults 脚本 |
 | `diy-part2.sh` | 编排器，按序执行上述脚本 |
-| `package/custom-provides/Makefile` | PROVIDES 虚拟包，编译空包接管所有 BINARY 包的依赖请求 |
+| `package/custom-provides/Makefile` | [自动生成] PROVIDES 虚拟包，由 generate-provides.sh 动态生成，接管所有 BINARY 包的依赖请求（严禁手动修改） |
 | `scripts/binary-packages.sh` | BINARY 包扁平列表，被 diy-part1/diy-part2 共用 |
 | `scripts/verify-kernel-deps.sh` | 校验 BINARY 包的内核依赖 (.config 启用检查) |
 | `scripts/verify-pkg-consistency.sh` | 校验 BINARY 包一致性 (LuCI 配对 + 运行时依赖闭环) |
