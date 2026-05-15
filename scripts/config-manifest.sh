@@ -49,7 +49,7 @@ BINARY_SOURCE[socat]="feed:packages"
 BINARY_SOURCE[iperf3]="feed:packages"
 BINARY_SOURCE[luci-i18n-irqbalance-zh-cn]="feed:luci"
 BINARY_SOURCE[luci-i18n-upnp-zh-cn]="feed:luci"
-BINARY_SOURCE[speedtest-go]="gh-bin:librespeed/speedtest-go:speedtest-go_.*linux_amd64\\.tar\\.gz:usr/bin"
+BINARY_SOURCE[speedtest-go]="feed:packages"
 BINARY_SOURCE[tcpdump]="feed:base"
 
 # --- 主题 ---
