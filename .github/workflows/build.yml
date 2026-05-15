@@ -91,9 +91,7 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
-        restore-keys: |
-          ccache-${{ env.REPO_BRANCH }}-
+        key: ccache-${{ env.REPO_BRANCH }}
 
     - name: Configure feeds
       run: |
@@ -134,60 +132,28 @@ jobs:
         path: /workdir/openwrt/dl
         key: dl-${{ env.REPO_BRANCH }}
 
-    - name: Compile kernel
-      id: kernel
+    - name: Compile the firmware
+      id: compile
       working-directory: /workdir/openwrt
       env:
         CCACHE_DIR: /home/runner/.ccache
       run: |
         mkdir -p "$CCACHE_DIR"
-        echo "$(nproc) thread tools install"
-        GITHUB_ENV=/dev/null timeout 3600 make tools/install -j$(nproc) V=s
-        echo "$(nproc) thread kernel compile"
-        if ! GITHUB_ENV=/dev/null timeout 7200 make target/linux/compile -j$(nproc) V=s; then
-          echo "Kernel parallel build failed, retrying single thread..."
-          GITHUB_ENV=/dev/null timeout 7200 make target/linux/compile -j1 V=s || exit $?
+        echo "$(nproc) thread compile"
+        if ! GITHUB_ENV=/dev/null timeout 14400 make -j$(nproc) V=s; then
+          echo "Parallel build failed, retrying with single thread..."
+          GITHUB_ENV=/dev/null timeout 28800 make -j1 V=s || exit $?
         fi
 
-    - name: Save ccache (kernel)
+    - name: Save ccache
+      if: always()
+      continue-on-error: true
       uses: actions/cache/save@v5
       with:
         path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-kernel-${{ github.run_id }}
-
-    - name: Compile packages
-      id: packages
-      working-directory: /workdir/openwrt
-      env:
-        CCACHE_DIR: /home/runner/.ccache
-      run: |
-        echo "$(nproc) thread package compile"
-        GITHUB_ENV=/dev/null timeout 1800 make package/download -j$(nproc) V=s
-        if ! GITHUB_ENV=/dev/null timeout 7200 make package/compile -j$(nproc) V=s; then
-          echo "Package parallel build failed, retrying single thread..."
-          GITHUB_ENV=/dev/null timeout 14400 make package/compile -j1 V=s || exit $?
-        fi
-
-    - name: Save ccache (final)
-      uses: actions/cache/save@v5
-      with:
-        path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
-
-    - name: Assemble firmware
-      id: assemble
-      working-directory: /workdir/openwrt
-      env:
-        CCACHE_DIR: /home/runner/.ccache
-      run: |
-        echo "Assembling rootfs and firmware..."
-        if ! GITHUB_ENV=/dev/null timeout 3600 make package/install -j$(nproc) V=s; then
-          GITHUB_ENV=/dev/null timeout 3600 make package/install -j1 V=s || exit $?
-        fi
-        GITHUB_ENV=/dev/null timeout 600 make target/linux/install -j$(nproc) V=s
+        key: ccache-${{ env.REPO_BRANCH }}
 
     - name: Verify binary injection
-      id: verify
       run: |
         MANIFEST="$GITHUB_WORKSPACE/binary-manifest.json"
         if [ ! -f "$MANIFEST" ]; then
@@ -199,7 +165,6 @@ jobs:
           echo "⚠ $SKIPPED package(s) were skipped during binary injection:" >> $GITHUB_STEP_SUMMARY
           jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key): \(.value.source)"' "$MANIFEST" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
           echo "" >> "$GITHUB_WORKSPACE/release.txt"
           echo "⚠ 以下第三方包未成功注入:" >> "$GITHUB_WORKSPACE/release.txt"
           jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key)"' "$MANIFEST" >> "$GITHUB_WORKSPACE/release.txt"
@@ -207,7 +172,6 @@ jobs:
         else
           echo "All binary packages injected successfully."
         fi
-        echo "total_injected=$(jq -r '.summary.total_injected // 0' "$MANIFEST")" >> $GITHUB_OUTPUT
 
     - name: Organize & Release
       if: env.UPLOAD_RELEASE == 'true' && success()
