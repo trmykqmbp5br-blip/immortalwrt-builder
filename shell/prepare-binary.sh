@@ -53,6 +53,55 @@ download_gh_release() {
     github_release_dl "$dl_url" "$output" || return 1
     [ -s "$output" ] && return 0 || return 1
 }
+# ================================================================
+# check_gh_binary_deps — 检查 gh-bin 提取的二进制文件兼容性
+# ================================================================
+check_gh_binary_deps() {
+    local target_file="$1"
+
+    echo "[check] Verifying $target_file ..."
+
+    # 1. 检查是否为 ELF
+    if ! file "$target_file" 2>/dev/null | grep -q "ELF"; then
+        echo "[check] Not an ELF executable, skip dep check."
+        return
+    fi
+
+    # 2. 检查架构
+    if ! file "$target_file" | grep -q "x86-64"; then
+        echo "  ERROR: Binary is NOT x86-64! It will not run on target."
+        file "$target_file"
+        exit 1
+    fi
+
+    # 3. 静态 vs 动态
+    if file "$target_file" | grep -q "statically linked"; then
+        echo "  [OK] Statically linked. No shared library deps."
+        return
+    fi
+
+    # 动态链接: 检查 interpreter
+    local interpreter
+    interpreter=$(readelf -l "$target_file" 2>/dev/null | grep "interpreter" | grep -oP '\[.*?\]' | sed 's/[][]//g') || true
+    if echo "$interpreter" | grep -q "ld-linux"; then
+        echo "  ERROR: glibc binary (interpreter: $interpreter). ImmortalWrt uses musl!"
+        exit 1
+    elif echo "$interpreter" | grep -q "ld-musl"; then
+        echo "  [OK] musl binary ($interpreter)"
+    else
+        echo "  [OK] interpreter: ${interpreter:-none}"
+    fi
+
+    # 4. NEEDED 库
+    local needed
+    needed=$(readelf -d "$target_file" 2>/dev/null | grep "NEEDED" | grep -oP '\[.*?\]' | sed 's/[][]//g') || true
+    if [ -n "$needed" ]; then
+        echo "  Requires shared libs:"
+        echo "$needed" | sed 's/^/    /'
+        echo "  Ensure these exist in firmware (/lib/, /usr/lib/)"
+    fi
+}
+
 
 # 从 GitHub Releases 下载 binary tar.gz，解压到 files/ 下指定目录
 download_gh_binary() {
@@ -76,8 +125,10 @@ download_gh_binary() {
     [ -z "$bin" ] && bin=$(find "$tmpdir" -maxdepth 2 -type f ! -name "*.txt" ! -name "*.md" ! -name "checksums*" -exec file {} \; | grep ELF | cut -d: -f1 | head -1)
     if [ -n "$bin" ]; then
         mkdir -p "$FILES_DIR/$target_dir"
-        cp "$bin" "$FILES_DIR/$target_dir/"
-        chmod +x "$FILES_DIR/$target_dir/$(basename "$bin")"
+        target_path="$FILES_DIR/$target_dir/$(basename "$bin")"
+        cp "$bin" "$target_path"
+        chmod +x "$target_path"
+        check_gh_binary_deps "$target_path"
         rm -rf "$tmpdir"
         return 0
     fi
