@@ -193,11 +193,6 @@ jobs:
         if [ "$SKIPPED" -gt 0 ]; then
           echo "⚠ $SKIPPED package(s) were skipped during binary injection:" >> $GITHUB_STEP_SUMMARY
           jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key): \(.value.source)"' "$MANIFEST" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "" >> "$GITHUB_WORKSPACE/release.txt"
-          echo "⚠ 以下第三方包未成功注入:" >> "$GITHUB_WORKSPACE/release.txt"
-          jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key)"' "$MANIFEST" >> "$GITHUB_WORKSPACE/release.txt"
-          echo "⚠ 二进制注入共 $SKIPPED 个包失败" >> "$GITHUB_WORKSPACE/release.txt"
         else
           echo "All binary packages injected successfully."
         fi
