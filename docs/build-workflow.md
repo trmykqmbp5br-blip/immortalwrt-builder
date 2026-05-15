@@ -203,7 +203,7 @@ diy-part2.sh → generate-provides.sh（动态生成 PROVIDES Makefile）
   → verify-pkg-consistency.sh（校验 LuCI 配对 + 运行时依赖闭环）
   → 二次 make download（补新添加包的源码）
 
-gh-bin 包的二进制兼容性检查：`check_gh_binary_deps()` 自动验证 ELF 架构（必需 x86-64）、链接方式（glibc 阻断）、列出 NEEDED 共享库，确保提取的二进制能在 ImmortalWrt musl 环境下运行。
+gh-bin 包的二进制兼容性检查：`check_gh_binary_deps()` 自动验证 ELF 架构（允许 x86-64 和 i386）、链接方式（仅阻断 x86-64 glibc，i386 交由兼容层兜底）、列出 NEEDED 共享库，确保提取的二进制能在 ImmortalWrt 64/32 位混合环境下运行。
 ```
 
 【关键】apply_manifest 必须在 make defconfig 之后执行，且之后绝不再执行 make defconfig。
@@ -321,9 +321,10 @@ OpenWrt 的 `rules.mk` 中 `export CCACHE_DIR:=$(CONFIG_CCACHE_DIR)` 覆盖了 G
 BINARY 包被禁用（`.config` 中设为 not set）后，如果有其他编译的包 `depends on` 这个 BINARY 包，make 会报依赖断裂错误。`package/custom-provides/Makefile` 编译一个空包，通过 OpenWrt 的 PROVIDES 机制声明它提供所有 BINARY 包名。编译期依赖系统检查到该虚拟包已启用（`CONFIG_PACKAGE_custom-binary-provides=y`），就会认为 BINARY 包已存在，不再报错。实际运行时，BINARY 包通过开机 `opkg install --force-depends` 安装到系统中。
 ### gh-bin 二进制兼容性检查做什么？
 
-`download_gh_binary()` 解压 tar.gz 提取 ELF 后自动调用 `check_gh_binary_deps()`：
+`download_gh_binary()` 解压 tar.gz 提取 ELF 后自动调用 `check_gh_binary_deps()`（详细策略见上方表格）：
 1. 确认是 ELF 文件
-2. 架构必须为 x86-64（否则 `exit 1` 阻断构建）
-3. 静态链接 → 直接可用
-4. glibc 动态链接 → `exit 1` 阻断（ImmortalWrt 使用 musl，glibc 二进制无法运行）
-5. musl 动态链接 → 打印 NEEDED 共享库清单，提醒确保在固件中存在
+2. 架构必须为 x86-64 或 i386（否则 `exit 1` 阻断构建）
+3. x86-64 静态/musl 动态 → 直接可用
+4. x86-64 glibc 动态链接 → `exit 1` 阻断（64 位环境无法运行 glibc）
+5. i386 静态/musl/glibc 动态 → 允许通过（依赖 32 位兼容层兜底）
+6. 打印 NEEDED 共享库清单，提醒确保在固件的 64 位或 32 位 lib 路径中存在
