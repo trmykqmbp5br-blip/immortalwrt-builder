@@ -141,6 +141,8 @@ jobs:
         CCACHE_DIR: /home/runner/.ccache
       run: |
         mkdir -p "$CCACHE_DIR"
+        echo "$(nproc) thread tools install"
+        GITHUB_ENV=/dev/null timeout 3600 make tools/install -j$(nproc) V=s
         echo "$(nproc) thread kernel compile"
         if ! GITHUB_ENV=/dev/null timeout 7200 make target/linux/compile -j$(nproc) V=s; then
           echo "Kernel parallel build failed, retrying single thread..."
