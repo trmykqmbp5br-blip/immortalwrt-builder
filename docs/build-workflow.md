@@ -28,7 +28,7 @@
 11. Compile firmware      # make -j$(nproc) V=s
 12. ccache stats           # ccache -s + 超 6GB 清理
 13. Verify binary inject  # 检查 binary-manifest.json 的 skipped 包
-14. Release               # gh release create + 清理旧 Release
+14. Release firmware      # 上传 img.gz + sysupgrade.bin，保留 3 个
 ```
 
 ---
@@ -100,6 +100,7 @@ continue-on-error: true
 | `scripts/verify-kernel-deps.sh` | 校验 BINARY 包的内核依赖 (.config 启用检查) |
 | `scripts/verify-pkg-consistency.sh` | 校验 BINARY 包一致性 (LuCI 配对 + 运行时依赖闭环) |
 | `scripts/generate-provides.sh` | 动态生成 PROVIDES 虚拟包 Makefile (替代手动维护) |
+| `files/etc/sysupgrade.conf` | sysupgrade 保留路径 (/etc/ipk-cache/ + 安装日志) |
 
 ### 包分类
 
