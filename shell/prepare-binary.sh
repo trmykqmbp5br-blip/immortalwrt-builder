@@ -1,14 +1,16 @@
 #!/bin/bash
-# shell/prepare-binary.sh — 二进制 ipk 下载 + 注入 + 清单生成
+# shell/prepare-binary.sh — 第三方 ipk 下载 + 开机安装
 #
 # 依赖 config-manifest.sh 预先 source（提供 BINARY_SOURCE 关联数组 + BINARY_PACKAGES）
 # 从 BINARY_SOURCE[包名] 读取来源标识，自动选择下载方式。
+#
+# 下载的 ipk 存入 files/etc/ipk-cache/，由 uci-defaults 在首次启动时 opkg install。
+# gh-bin: 来源直接解压二进制到 files/ 对应目录（不走 opkg）。
 #
 # 用法: source shell/prepare-binary.sh && prepare_binary_packages "files" "$BINARY_PACKAGES"
 
 IMMORTALWRT_RELEASE="24.10.6"
 ARCH="x86_64"
-MIRROR_BASE="https://mirrors.ustc.edu.cn/immortalwrt/releases/${IMMORTALWRT_RELEASE}/packages/${ARCH}"
 
 # ================================================================
 # 解析 BINARY_SOURCE 并下载
@@ -22,7 +24,7 @@ github_api_get() {
     curl -sL $auth "$url" 2>/dev/null
 }
 
-# GitHub Release 下载（自动处理重定向）
+# GitHub Release 下载
 github_release_dl() {
     local url="$1"
     local output="$2"
@@ -36,7 +38,6 @@ download_gh_release() {
     local repo="$1"
     local pattern="$2"
     local output="$3"
-    echo "    Fetching release info from $repo ..."
     local resp=$(github_api_get "https://api.github.com/repos/${repo}/releases/latest?per_page=100")
     local dl_url=$(echo "$resp" \
         | grep "browser_download_url" \
@@ -44,15 +45,13 @@ download_gh_release() {
         | head -1 \
         | sed 's/.*"browser_download_url": "\(.*\)"/\1/')
     if [ -z "$dl_url" ]; then
-        # 检查是否被限流
         if echo "$resp" | grep -qi "rate limit"; then
-            echo "    > ERROR: GitHub API rate limited! Set GH_TOKEN to avoid this." >&2
+            echo "  > ERROR: GitHub API rate limited! Set GH_TOKEN to avoid this." >&2
         fi
-        echo "    > Pattern '$pattern' not found in releases" >&2
+        echo "  > Pattern '$pattern' not found in releases" >&2
         return 1
     fi
-    echo "    Downloading: $(basename "$dl_url")"
-    github_release_dl "$dl_url" "$output" || return 1
+    github_release_dl "$dl_url" "$output"
     [ -s "$output" ] && return 0 || return 1
 }
 
@@ -62,7 +61,6 @@ download_gh_binary() {
     local pattern="$2"
     local target_dir="$3"
     local tmpdir=$(mktemp -d)
-    echo "    Fetching release info from $repo ..."
     local resp=$(github_api_get "https://api.github.com/repos/${repo}/releases/latest?per_page=100")
     local dl_url=$(echo "$resp" \
         | grep "browser_download_url" \
@@ -70,10 +68,7 @@ download_gh_binary() {
         | head -1 \
         | sed 's/.*"browser_download_url": "\(.*\)"/\1/')
     if [ -z "$dl_url" ]; then
-        if echo "$resp" | grep -qi "rate limit"; then
-            echo "    > ERROR: GitHub API rate limited! Set GH_TOKEN to avoid this." >&2
-        fi
-        echo "    > Pattern '$pattern' not found in releases" >&2
+        echo "  > Pattern '$pattern' not found in releases" >&2
         rm -rf "$tmpdir"; return 1
     fi
     local archive="${tmpdir}/archive.tar.gz"
@@ -94,57 +89,11 @@ download_gh_binary() {
     return 1
 }
 
-# 从 ImmortalWrt USTC 镜像 feed 下载 ipk
-download_feed_pkg() {
-    local feed="$1"
-    local pkg="$2"
-    local output="$3"
-    local feed_url="${MIRROR_BASE}/${feed}"
-    echo "    Feed URL: $feed_url"
-    local pkg_file=$(curl -sL --retry 3 --retry-delay 3 --connect-timeout 15 "${feed_url}/Packages.gz" 2>/dev/null \
-        | gzip -d 2>/dev/null \
-        | awk -v pkg="$pkg" '
-            /^Package: / {name=$2}
-            /^Filename: / {file=$2}
-            /^$/ { if (name==pkg) { print file; exit }; name="" }
-        ')
-    if [ -z "$pkg_file" ]; then
-        echo "    > Package '$pkg' not found in feed $feed" >&2
-        return 1
-    fi
-    echo "    Filename: $pkg_file"
-    curl -sL --retry 3 --retry-delay 3 --connect-timeout 15 "${feed_url}/${pkg_file}" -o "$output" 2>/dev/null
-}
-
-# 解压 ipk 中的 data 归档到目标目录
-extract_ipk_to() {
-    local ipk="$1"
-    local dest="$2"
-    local tmpdir=$(mktemp -d)
-    mkdir -p "$dest"
-    tar -xzf "$ipk" -C "$tmpdir" ./data.tar.gz 2>/dev/null || \
-    tar -xzf "$ipk" -C "$tmpdir" ./data.tar.xz 2>/dev/null || \
-    { rm -rf "$tmpdir"; return 1; }
-    if [ -f "$tmpdir/data.tar.gz" ]; then
-        tar -xzf "$tmpdir/data.tar.gz" -C "$dest" 2>/dev/null
-    elif [ -f "$tmpdir/data.tar.xz" ]; then
-        tar -xJf "$tmpdir/data.tar.xz" -C "$dest" 2>/dev/null
-    else
-        rm -rf "$tmpdir"
-        return 1
-    fi
-    rm -rf "$tmpdir"
-    return 0
-}
-
 # ================================================================
 # prepare_binary_packages — 主入口
-# 读取 BINARY_SOURCE（由 config-manifest.sh 提供全局关联数组），
-# 遍历 $WANTED 列表，下载并注入每个包。
-# 最后生成 binary-manifest.json。
-#
-# 用法: prepare_binary_packages "files目录" "包列表"
-# 示例: prepare_binary_packages "$REPO_ROOT/files" "$BINARY_PACKAGES"
+# 遍历 $WANTED 列表，下载并保存 ipk 到 files/etc/ipk-cache/。
+# gh-bin 来源直接解压二进制到 files/ 指定目录。
+# 最后生成 binary-manifest.json 并创建 uci-defaults 开机安装脚本。
 # ================================================================
 prepare_binary_packages() {
     local FILES_DIR="${1:-files}"
@@ -153,47 +102,34 @@ prepare_binary_packages() {
 
     [ -z "$WANTED" ] && return 0
 
-    echo "=== 注入二进制第三方包 ==="
+    echo "=== Download 3rd-party packages ==="
     local TMPDIR=$(mktemp -d)
-    mkdir -p "$FILES_DIR"
+    local IPK_CACHE_DIR="$FILES_DIR/etc/ipk-cache"
+    mkdir -p "$FILES_DIR" "$IPK_CACHE_DIR"
 
-    # 记录每个包的处理状态
     declare -A PKG_STATUS
+    local has_ipk=false
 
     for pkg in $WANTED; do
-        # 从 BINARY_SOURCE 获取来源标识（由 config-manifest.sh 声明）
         local src="${BINARY_SOURCE[$pkg]:-}"
         [ -z "$src" ] && { PKG_STATUS["$pkg"]="no_source"; continue; }
 
         local method="${src%%:*}"
         local payload="${src#*:}"
-        local ok=false
 
         case "$method" in
-            feed|ustc)
-                local feed="$payload"
-                echo "  处理: $pkg (feed: $feed)"
-                download_feed_pkg "$feed" "$pkg" "${TMPDIR}/${pkg}.ipk" && ok=true
-                if $ok && extract_ipk_to "${TMPDIR}/${pkg}.ipk" "$FILES_DIR"; then
-                    echo "    ✓ $pkg 已注入"
-                    PKG_STATUS["$pkg"]="injected"
-                else
-                    echo "  [SKIP] $pkg (feed $feed: 未找到)"
-                    PKG_STATUS["$pkg"]="skipped"
-                fi
-                ;;
             gh)
                 local repo="${payload%%:*}"
                 local pattern="${payload#*:}"
-                # 如果 payload 没有 ":"，则 pattern 为空；此时用包名做默认模式
                 [ "$repo" = "$pattern" ] && pattern="$pkg"
-                echo "  处理: $pkg (GitHub: $repo, pattern: $pattern)"
-                download_gh_release "$repo" "$pattern" "${TMPDIR}/${pkg}.ipk" && ok=true
-                if $ok && extract_ipk_to "${TMPDIR}/${pkg}.ipk" "$FILES_DIR"; then
-                    echo "    ✓ $pkg 已注入"
+                echo "  pkg: $pkg (GitHub: $repo)"
+                if download_gh_release "$repo" "$pattern" "${TMPDIR}/${pkg}.ipk"; then
+                    cp "${TMPDIR}/${pkg}.ipk" "$IPK_CACHE_DIR/"
+                    echo "    + $pkg.ipk saved to /etc/ipk-cache/"
                     PKG_STATUS["$pkg"]="injected"
+                    has_ipk=true
                 else
-                    echo "  [SKIP] $pkg (GitHub $repo: no matching ipk)"
+                    echo "    - $pkg skipped (download failed)"
                     PKG_STATUS["$pkg"]="skipped"
                 fi
                 ;;
@@ -202,51 +138,70 @@ prepare_binary_packages() {
                 local rest="${payload#*:}"
                 local the_pattern="${rest%:*}"
                 local target_dir="${rest##*:}"
-                [ "$repo" = "$rest" ] && { echo "  [SKIP] $pkg (bad gh-bin spec)"; PKG_STATUS["$pkg"]="skipped"; continue; }
-                echo "  处理: $pkg (GitHub binary: $repo, pattern: $the_pattern)"
+                [ "$repo" = "$rest" ] && { echo "  - $pkg skipped (bad spec)"; PKG_STATUS["$pkg"]="skipped"; continue; }
+                echo "  pkg: $pkg (GitHub binary: $repo)"
                 if download_gh_binary "$repo" "$the_pattern" "$target_dir"; then
-                    echo "    ✓ $pkg 已注入到 files/$target_dir/"
+                    echo "    + $pkg binary extracted to files/$target_dir/"
                     PKG_STATUS["$pkg"]="injected"
                 else
-                    echo "  [SKIP] $pkg (GitHub $repo: binary not found)"
+                    echo "    - $pkg skipped (download failed)"
                     PKG_STATUS["$pkg"]="skipped"
                 fi
                 ;;
             store)
-                echo "  跳过: $pkg (由 prepare-store.sh 处理)"
+                echo "  pkg: $pkg (handled by prepare-store.sh)"
                 PKG_STATUS["$pkg"]="pending"
                 ;;
             *)
-                echo "  [SKIP] $pkg (unrecognized source: $src)"
+                echo "  - $pkg skipped (unrecognized source: $src)"
                 PKG_STATUS["$pkg"]="bad_source"
                 ;;
         esac
     done
 
+    # 如果有 ipk 需要开机安装，生成 uci-defaults 脚本
+    if $has_ipk; then
+        local UCI_SCRIPT="$FILES_DIR/etc/uci-defaults/99-install-ipk-cache.sh"
+        mkdir -p "$(dirname "$UCI_SCRIPT")"
+        cat > "$UCI_SCRIPT" << 'UCIEOF'
+#!/bin/sh
+# 99-install-ipk-cache.sh — 首次启动安装预置 ipk
+# 由 prepare-binary.sh 自动生成，uci-defaults 框架保证只执行一次后自删
+
+IPK_DIR="/etc/ipk-cache"
+[ -d "$IPK_DIR" ] || exit 0
+
+for ipk in "$IPK_DIR"/*.ipk; do
+    [ -f "$ipk" ] || continue
+    opkg install "$ipk" --force-depends 2>/dev/null && \
+        rm -f "$ipk"
+done
+
+exit 0
+UCIEOF
+        chmod +x "$UCI_SCRIPT"
+        echo "  uci-defaults script created: $UCI_SCRIPT"
+    fi
+
     # 生成 binary-manifest.json
-    generate_injection_manifest "$FILES_DIR" "$WANTED" PKG_STATUS
+    generate_manifest "$FILES_DIR" "$WANTED" PKG_STATUS
 
     rm -rf "$TMPDIR"
-    echo "=== 二进制包注入完成 ==="
+    echo "=== Done ==="
 }
 
 # ================================================================
-# generate_injection_manifest — 生成注入结果清单
-# 写入 files/etc/binary-manifest.json（刷机后 /etc 下可见）
-# 同时复制到 $GITHUB_WORKSPACE（CI 验证用）
+# generate_manifest — 生成注入结果清单
 # ================================================================
-generate_injection_manifest() {
+generate_manifest() {
     local files_dir="$1"
     local wanted="$2"
-    local -n status_ref="$3"  # nameref to associative array
+    local -n status_ref="$3"
     local pkg
 
     local output="${files_dir}/etc/binary-manifest.json"
     mkdir -p "${files_dir}/etc"
 
-    echo "=== 生成二进制注入清单 ==="
-
-    # 统计
     local total=0 injected=0 skipped=0 pending=0
     for pkg in $wanted; do
         : $((total++))
@@ -263,21 +218,14 @@ generate_injection_manifest() {
         echo "  \"immortalwrt_release\": \"$IMMORTALWRT_RELEASE\","
         echo "  \"generated_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
         echo "  \"packages\": {"
-
         local first=true
         for pkg in $wanted; do
             $first || echo ","
             first=false
-
             local st="${status_ref[$pkg]:-unknown}"
             local src="${BINARY_SOURCE[$pkg]:-unknown}"
-
-            echo -n "    \"$pkg\": {"
-            echo -n "\"status\": \"$st\", "
-            echo -n "\"source\": \"$src\""
-            echo -n "}"
+            echo -n "    \"$pkg\": {\"status\": \"$st\", \"source\": \"$src\"}"
         done
-
         echo ""
         echo "  },"
         echo "  \"summary\": {"
@@ -289,13 +237,7 @@ generate_injection_manifest() {
         echo "}"
     } > "$output"
 
-    echo "  manifest written to $output"
-
-    # 同步到 GITHUB_WORKSPACE（CI 验证用）
     if [ -n "${GITHUB_WORKSPACE:-}" ]; then
         cp "$output" "${GITHUB_WORKSPACE}/binary-manifest.json" 2>/dev/null || true
-        echo "  manifest copied to \$GITHUB_WORKSPACE/binary-manifest.json"
     fi
-
-    echo "=== 清单生成完毕 ==="
 }
