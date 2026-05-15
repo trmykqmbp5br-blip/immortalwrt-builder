@@ -192,7 +192,7 @@ prepare_binary_packages() {
                 if $ok && extract_ipk_to "${TMPDIR}/${pkg}.ipk" "$FILES_DIR"; then
                     echo "    ✓ $pkg 已注入"
                 else
-                    echo "    skip: $pkg (not found)"
+                    echo "  [SKIP] $pkg (not found)"
                 fi
                 ;;
             gh)
@@ -204,7 +204,7 @@ prepare_binary_packages() {
                 if $ok && extract_ipk_to "${TMPDIR}/${pkg}.ipk" "$FILES_DIR"; then
                     echo "    ✓ $pkg 已注入"
                 else
-                    echo "    skip: $pkg (not found)"
+                    echo "  [SKIP] $pkg (not found)"
                 fi
                 ;;
             gh-bin)
@@ -216,14 +216,14 @@ prepare_binary_packages() {
                 if download_gh_binary "$repo" "$pattern" "$target_dir"; then
                     echo "    ✓ $pkg 已注入到 files/$target_dir/"
                 else
-                    echo "    skip: $pkg (not found)"
+                    echo "  [SKIP] $pkg (not found)"
                 fi
                 ;;
             store)
                 echo "  跳过: $pkg (由 prepare-store.sh 处理)"
                 ;;
             *)
-                echo "    skip: $pkg (no source)"
+                echo "  [SKIP] $pkg (no source)"
                 ;;
         esac
     done
