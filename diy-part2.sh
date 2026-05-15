@@ -15,6 +15,10 @@ SCRIPTS_DIR="$REPO_ROOT/scripts"
 
 echo "=== diy-part2.sh 开始 ==="
 
+# ccache 限制 5GB + 启用压缩
+export CCACHE_MAXSIZE="5G"
+export CCACHE_COMPRESS="true"
+
 # ============= 修复有问题的 feed 包 Makefile =============
 for makefile in package/feeds/*/*/luci-app-fchomo/Makefile; do
     [ -f "$makefile" ] && sed -i 's/depends on.*PACKAGE_luci-app-fchomo/depends on +PACKAGE_luci-app-fchomo/' "$makefile" && \
