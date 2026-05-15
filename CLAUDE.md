@@ -14,7 +14,7 @@ Single-context — 单个 `CONTEXT.md` + `docs/adr/` 在项目根目录。详见
 
 ### Build workflow
 
-完整构建流程文档见 `docs/build-workflow.md`，包括缓存策略、第三方包处理架构、BINARY_SOURCE 声明格式等。
+完整构建流程文档见 `docs/使用说明.md`，包括缓存策略、第三方包处理架构、BINARY_SOURCE 声明格式等。
 
 **维护注意事项（必须遵守）：**
 1. 新增 BINARY 包时 → `package/custom-provides/Makefile` 的 `PROVIDES:=` 里加上包名，否则编译期依赖检查会断裂
