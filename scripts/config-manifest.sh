@@ -29,9 +29,11 @@ declare -A BINARY_SOURCE
 BINARY_SOURCE[luci-app-openclash]="gh:vernesong/OpenClash"
 
 # --- DNS ---
-BINARY_SOURCE[smartdns]="gh:pymumu/smartdns"
-BINARY_SOURCE[luci-app-smartdns]="ustc:luci"
-BINARY_SOURCE[luci-i18n-smartdns-zh-cn]="ustc:luci"
+# 注意: pymumu/smartdns GitHub release 产物是 tar.gz 不是 ipk,
+#       不能用 gh: 方式下载. 改为从 feed:packages 拉预编译 ipk
+BINARY_SOURCE[smartdns]="feed:packages"
+BINARY_SOURCE[luci-app-smartdns]="feed:luci"
+BINARY_SOURCE[luci-i18n-smartdns-zh-cn]="feed:luci"
 
 # --- 实用工具 ---
 BINARY_SOURCE[luci-i18n-diskman-zh-cn]="feed:luci"
@@ -60,17 +62,17 @@ BINARY_SOURCE[luci-app-argon-config]="feed:luci"
 BINARY_SOURCE[luci-i18n-argon-config-zh-cn]="feed:luci"
 
 # --- Docker（条件编译） ---
-BINARY_SOURCE[docker]="ustc:packages"
-BINARY_SOURCE[dockerd]="ustc:packages"
-BINARY_SOURCE[containerd]="ustc:packages"
-BINARY_SOURCE[runc]="ustc:packages"
-BINARY_SOURCE[tini]="ustc:packages"
-BINARY_SOURCE[docker-compose]="ustc:packages"
-BINARY_SOURCE[luci-lib-docker]="ustc:luci"
-BINARY_SOURCE[luci-app-docker]="ustc:luci"
-BINARY_SOURCE[luci-i18n-docker-zh-cn]="ustc:luci"
-BINARY_SOURCE[luci-app-dockerman]="ustc:luci"
-BINARY_SOURCE[luci-i18n-dockerman-zh-cn]="ustc:luci"
+BINARY_SOURCE[docker]="feed:packages"
+BINARY_SOURCE[dockerd]="feed:packages"
+BINARY_SOURCE[containerd]="feed:packages"
+BINARY_SOURCE[runc]="feed:packages"
+BINARY_SOURCE[tini]="feed:packages"
+BINARY_SOURCE[docker-compose]="feed:packages"
+BINARY_SOURCE[luci-lib-docker]="feed:luci"
+BINARY_SOURCE[luci-app-docker]="feed:luci"
+BINARY_SOURCE[luci-i18n-docker-zh-cn]="feed:luci"
+BINARY_SOURCE[luci-app-dockerman]="feed:luci"
+BINARY_SOURCE[luci-i18n-dockerman-zh-cn]="feed:luci"
 
 # --- 商店 ---
 BINARY_SOURCE[luci-app-store]="store:special"

@@ -84,14 +84,16 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
+        restore-keys: dl-${{ env.REPO_BRANCH }}-
 
     - name: Restore ccache
       id: restore-ccache
       uses: actions/cache/restore@v5
       with:
         path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
+        restore-keys: ccache-${{ env.REPO_BRANCH }}-
 
     - name: Configure feeds
       run: |
@@ -108,6 +110,7 @@ jobs:
       env:
         INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
         ROOTFS_SIZE: ${{ github.event.inputs.rootfs_size }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         [ -e files ] && mv files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
@@ -125,12 +128,13 @@ jobs:
         echo "=== 下载后 ==="
         df -hT .
 
-    - name: Save dl cache (miss only)
+    - name: Save dl cache
+      if: always()
+      continue-on-error: true
       uses: actions/cache/save@v5
-      if: steps.restore-dl.outputs.cache-hit != 'true'
       with:
         path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
 
     - name: Compile the firmware
       id: compile
@@ -151,7 +155,7 @@ jobs:
       uses: actions/cache/save@v5
       with:
         path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
 
     - name: Verify binary injection
       run: |

@@ -14,18 +14,46 @@ MIRROR_BASE="https://mirrors.ustc.edu.cn/immortalwrt/releases/${IMMORTALWRT_RELE
 # 解析 BINARY_SOURCE 并下载
 # ================================================================
 
+# GitHub API 请求（带 token 防限流）
+github_api_get() {
+    local url="$1"
+    local auth=""
+    [ -n "${GH_TOKEN:-}" ] && auth="-H \"Authorization: Bearer $GH_TOKEN\""
+    curl -sL $auth "$url" 2>/dev/null
+}
+
+# GitHub Release 下载（自动处理重定向）
+github_release_dl() {
+    local url="$1"
+    local output="$2"
+    local auth=""
+    [ -n "${GH_TOKEN:-}" ] && auth="-H \"Authorization: Bearer $GH_TOKEN\""
+    curl -sL --retry 3 --retry-delay 5 --connect-timeout 15 $auth "$url" -o "$output" 2>/dev/null
+}
+
 # 从 GitHub Releases 下载 ipk
 download_gh_release() {
     local repo="$1"
     local pattern="$2"
     local output="$3"
-    local dl_url=$(curl -sL "https://api.github.com/repos/${repo}/releases/latest?per_page=100" 2>/dev/null \
+    echo "    Fetching release info from $repo ..."
+    local resp=$(github_api_get "https://api.github.com/repos/${repo}/releases/latest?per_page=100")
+    local dl_url=$(echo "$resp" \
         | grep "browser_download_url" \
         | grep -E "$pattern" \
         | head -1 \
         | sed 's/.*"browser_download_url": "\(.*\)"/\1/')
-    [ -z "$dl_url" ] && return 1
-    curl -sL "$dl_url" -o "$output"
+    if [ -z "$dl_url" ]; then
+        # 检查是否被限流
+        if echo "$resp" | grep -qi "rate limit"; then
+            echo "    > ERROR: GitHub API rate limited! Set GH_TOKEN to avoid this." >&2
+        fi
+        echo "    > Pattern '$pattern' not found in releases" >&2
+        return 1
+    fi
+    echo "    Downloading: $(basename "$dl_url")"
+    github_release_dl "$dl_url" "$output" || return 1
+    [ -s "$output" ] && return 0 || return 1
 }
 
 # 从 GitHub Releases 下载 binary tar.gz，解压到 files/ 下指定目录
@@ -34,14 +62,22 @@ download_gh_binary() {
     local pattern="$2"
     local target_dir="$3"
     local tmpdir=$(mktemp -d)
-    local dl_url=$(curl -sL "https://api.github.com/repos/${repo}/releases/latest?per_page=100" 2>/dev/null \
+    echo "    Fetching release info from $repo ..."
+    local resp=$(github_api_get "https://api.github.com/repos/${repo}/releases/latest?per_page=100")
+    local dl_url=$(echo "$resp" \
         | grep "browser_download_url" \
         | grep -E "$pattern" \
         | head -1 \
         | sed 's/.*"browser_download_url": "\(.*\)"/\1/')
-    [ -z "$dl_url" ] && { rm -rf "$tmpdir"; return 1; }
+    if [ -z "$dl_url" ]; then
+        if echo "$resp" | grep -qi "rate limit"; then
+            echo "    > ERROR: GitHub API rate limited! Set GH_TOKEN to avoid this." >&2
+        fi
+        echo "    > Pattern '$pattern' not found in releases" >&2
+        rm -rf "$tmpdir"; return 1
+    fi
     local archive="${tmpdir}/archive.tar.gz"
-    curl -sL "$dl_url" -o "$archive"
+    github_release_dl "$dl_url" "$archive" || { rm -rf "$tmpdir"; return 1; }
     tar -xzf "$archive" -C "$tmpdir" 2>/dev/null
     local bin=$(find "$tmpdir" -maxdepth 2 -type f -executable 2>/dev/null | head -1)
     if [ -z "$bin" ]; then
@@ -64,15 +100,20 @@ download_feed_pkg() {
     local pkg="$2"
     local output="$3"
     local feed_url="${MIRROR_BASE}/${feed}"
-    local pkg_file=$(curl -sL "${feed_url}/Packages.gz" 2>/dev/null \
+    echo "    Feed URL: $feed_url"
+    local pkg_file=$(curl -sL --retry 3 --retry-delay 3 --connect-timeout 15 "${feed_url}/Packages.gz" 2>/dev/null \
         | gzip -d 2>/dev/null \
         | awk -v pkg="$pkg" '
             /^Package: / {name=$2}
             /^Filename: / {file=$2}
             /^$/ { if (name==pkg) { print file; exit }; name="" }
         ')
-    [ -z "$pkg_file" ] && return 1
-    curl -sL "${feed_url}/${pkg_file}" -o "$output"
+    if [ -z "$pkg_file" ]; then
+        echo "    > Package '$pkg' not found in feed $feed" >&2
+        return 1
+    fi
+    echo "    Filename: $pkg_file"
+    curl -sL --retry 3 --retry-delay 3 --connect-timeout 15 "${feed_url}/${pkg_file}" -o "$output" 2>/dev/null
 }
 
 # 解压 ipk 中的 data 归档到目标目录
@@ -137,7 +178,7 @@ prepare_binary_packages() {
                     echo "    ✓ $pkg 已注入"
                     PKG_STATUS["$pkg"]="injected"
                 else
-                    echo "  [SKIP] $pkg (not found)"
+                    echo "  [SKIP] $pkg (feed $feed: 未找到)"
                     PKG_STATUS["$pkg"]="skipped"
                 fi
                 ;;
@@ -146,13 +187,13 @@ prepare_binary_packages() {
                 local pattern="${payload#*:}"
                 # 如果 payload 没有 ":"，则 pattern 为空；此时用包名做默认模式
                 [ "$repo" = "$pattern" ] && pattern="$pkg"
-                echo "  处理: $pkg (GitHub: $repo)"
+                echo "  处理: $pkg (GitHub: $repo, pattern: $pattern)"
                 download_gh_release "$repo" "$pattern" "${TMPDIR}/${pkg}.ipk" && ok=true
                 if $ok && extract_ipk_to "${TMPDIR}/${pkg}.ipk" "$FILES_DIR"; then
                     echo "    ✓ $pkg 已注入"
                     PKG_STATUS["$pkg"]="injected"
                 else
-                    echo "  [SKIP] $pkg (not found)"
+                    echo "  [SKIP] $pkg (GitHub $repo: no matching ipk)"
                     PKG_STATUS["$pkg"]="skipped"
                 fi
                 ;;
@@ -162,12 +203,12 @@ prepare_binary_packages() {
                 local the_pattern="${rest%:*}"
                 local target_dir="${rest##*:}"
                 [ "$repo" = "$rest" ] && { echo "  [SKIP] $pkg (bad gh-bin spec)"; PKG_STATUS["$pkg"]="skipped"; continue; }
-                echo "  处理: $pkg (GitHub binary: $repo)"
+                echo "  处理: $pkg (GitHub binary: $repo, pattern: $the_pattern)"
                 if download_gh_binary "$repo" "$the_pattern" "$target_dir"; then
                     echo "    ✓ $pkg 已注入到 files/$target_dir/"
                     PKG_STATUS["$pkg"]="injected"
                 else
-                    echo "  [SKIP] $pkg (not found)"
+                    echo "  [SKIP] $pkg (GitHub $repo: binary not found)"
                     PKG_STATUS["$pkg"]="skipped"
                 fi
                 ;;
