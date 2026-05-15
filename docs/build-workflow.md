@@ -98,7 +98,8 @@ continue-on-error: true
 | `package/custom-provides/Makefile` | PROVIDES 虚拟包，编译空包接管所有 BINARY 包的依赖请求 |
 | `scripts/binary-packages.sh` | BINARY 包扁平列表，被 diy-part1/diy-part2 共用 |
 | `scripts/verify-kernel-deps.sh` | 校验 BINARY 包的内核依赖 (.config 启用检查) |
-| `scripts/verify-pkg-consistency.sh` | 校验 BINARY 包前后端一致性 (core↔luci-app 配对 + ipk 依赖完整性) |
+| `scripts/verify-pkg-consistency.sh` | 校验 BINARY 包一致性 (LuCI 配对 + 运行时依赖闭环) |
+| `scripts/generate-provides.sh` | 动态生成 PROVIDES 虚拟包 Makefile (替代手动维护) |
 
 ### 包分类
 
@@ -145,7 +146,8 @@ diy-part1.sh
   → ln -sf 链接 package/custom-provides/（PROVIDES 虚拟包）
   → ./scripts/feeds update -a / install -a
 
-diy-part2.sh → kernel-config/runtime patches
+diy-part2.sh → generate-provides.sh（动态生成 PROVIDES Makefile）
+  → kernel-config/runtime patches
   → CCACHE_DIR + CCACHE_MAXSIZE + CCACHE_COMPRESS 注入
   → make defconfig（OpenWrt 计算 Kconfig 依赖）
   → config-manifest.sh + apply_manifest()
@@ -162,7 +164,7 @@ diy-part2.sh → kernel-config/runtime patches
       ├─ gh-bin: → download_gh_binary()
       └─ 生成 uci-defaults/99-install-ipk-cache.sh
   → verify-kernel-deps.sh（校验 ipk 中 kmod 依赖 + BINARY_KERNEL_DEPS 声明式依赖）
-  → verify-pkg-consistency.sh（校验 core↔luci-app 强制配对 + ipk 依赖完整性）
+  → verify-pkg-consistency.sh（校验 LuCI 配对 + 运行时依赖闭环）
   → 二次 make download（补新添加包的源码）
 
 gh-bin 包的二进制兼容性检查：`check_gh_binary_deps()` 自动验证 ELF 架构（必需 x86-64）、链接方式（glibc 阻断）、列出 NEEDED 共享库，确保提取的二进制能在 ImmortalWrt musl 环境下运行。
@@ -190,7 +192,8 @@ BINARY_SOURCE[包名]="feed:{luci|packages|base}"
 # GitHub Release — 从最新 Release 下载 ipk
 BINARY_SOURCE[包名]="gh:owner/repo"
 # pattern 默认用包名，可自定义
-BINARY_SOURCE[包名]="gh:owner/repo:pattern_regex"
+BINARY_SOURCE[包名]="gh:owner/repo"
+BINARY_SOURCE[包名]="gh:owner/repo:tag"  # 锁定版本
 
 # GitHub Release binary — 下载 tar.gz，提取 ELF 到指定目录
 BINARY_SOURCE[包名]="gh-bin:owner/repo:pattern_regex:target_dir"
