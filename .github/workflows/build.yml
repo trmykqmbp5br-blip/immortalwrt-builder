@@ -134,13 +134,21 @@ jobs:
         echo "=== 下载后 ==="
         df -hT .
 
-    - name: Save dl cache
+    - name: Save dl cache on success
       if: success()
       continue-on-error: true
       uses: actions/cache/save@v5
       with:
-        path: /workdir/openwrt/dl
+        path: /workdir/openwrt/dl/
         key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+
+    - name: Save dl cache on failure
+      if: failure()
+      continue-on-error: true
+      uses: actions/cache/save@v5
+      with:
+        path: /workdir/openwrt/dl/
+        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
 
     - name: Compile the firmware
       id: compile
