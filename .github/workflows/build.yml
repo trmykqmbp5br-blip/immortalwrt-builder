@@ -1,422 +1,211 @@
-name: Build ImmortalWrt 24.10.6 x86_64
-
-
-
-on:
-
-  workflow_dispatch:
-
-    inputs:
-
-      rootfs_size:
-
-        description: 'Rootfs size (MB)'
-
-        required: true
-
-        default: '4096'
-
-      include_docker:
-
-        description: 'Include Docker'
-
-        required: true
-
-        default: 'yes'
-
-        type: choice
-
-        options:
-
-          - 'yes'
-
-          - 'no'
-
-
-
-permissions:
-
-  contents: write
-
-  actions: write
-
-
-
-env:
-
-  REPO_URL: https://github.com/immortalwrt/immortalwrt
-
-  REPO_BRANCH: v24.10.6
-
-  FEEDS_CONF: feeds.conf.default
-
-  CONFIG_FILE: .config
-
-  DIY_P1_SH: diy-part1.sh
-
-  DIY_P2_SH: diy-part2.sh
-
-  UPLOAD_FIRMWARE: true
-
-  UPLOAD_RELEASE: true
-
-  TZ: Asia/Shanghai
-
-
-
-jobs:
-
-  build:
-
-    runs-on: ubuntu-22.04
-
-    timeout-minutes: 540
-
-
-
-    steps:
-
-    - name: Prepare environment
-
-      env:
-
-        DEBIAN_FRONTEND: noninteractive
-
-      run: |
-
-        echo "=== 释放磁盘空间 ==="
-
-        sudo rm -rf /opt/hostedtoolcache /usr/share/dotnet /usr/local/lib/android /usr/local/share/powershell /usr/local/.ghcup /usr/local/julia* /opt/ghc
-
-        sudo docker image prune --all --force 2>/dev/null || true
-
-        sudo swapoff -a 2>/dev/null || true
-
-        sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none 2>/dev/null
-
-        sudo mkswap /swapfile 2>/dev/null && sudo swapon /swapfile 2>/dev/null
-
-        echo "=== 安装构建依赖 ==="
-
-        sudo timedatectl set-timezone "$TZ"
-
-        sudo mkdir -p /workdir
-
-        sudo chown $USER:$GROUPS /workdir
-
-        timeout 120 sudo apt-get update -y || {
-
-          echo "apt-get update timeout, retrying..."
-
-          timeout 120 sudo apt-get update -y
-
-        }
-
-        timeout 300 sudo apt-get install -y --no-install-recommends \
-
-          antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-
-          bzip2 ccache clang cmake cpio curl device-tree-compiler e2fsprogs fastjar flex gawk gettext \
-
-          gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
-
-          libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev \
-
-          libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev \
-
-          lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
-
-          python3 python3-pip python3-pyelftools python3-setuptools qemu-utils re2c rsync \
-
-          scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto \
-
-          xxd zlib1g-dev zstd
-
-        sudo apt-get clean
-
-        sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
-
-        df -hT /
-
-
-
-    - name: Checkout
-
-      uses: actions/checkout@v6
-
-
-
-    - name: Clone source code
-
-      working-directory: /workdir
-
-      run: |
-
-        df -hT $PWD
-
-        timeout 300 git clone $REPO_URL -b $REPO_BRANCH openwrt
-
-        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
-
-
-    - name: Restore dl cache
-
-      id: restore-dl
-
-      uses: actions/cache/restore@v5
-
-      with:
-
-        path: /workdir/openwrt/dl
-
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
-
-        restore-keys: |
-
-          dl-${{ env.REPO_BRANCH }}-
-
-
-
-    - name: Get date for ccache key
-
-      id: ccache-date
-
-      run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
-
-
-
-    - name: ccache cache
-
-      uses: actions/cache@v4
-
-      with:
-
-        path: /home/runner/.ccache
-
-        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
-
-        restore-keys: |
-
-          ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-
-
-          ccache-${{ env.REPO_BRANCH }}-
-
-
-
-    - name: Configure feeds
-
-      run: |
-
-        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-
-        chmod +x $DIY_P1_SH
-
-        cd openwrt
-
-        timeout 60 $GITHUB_WORKSPACE/$DIY_P1_SH
-
-        timeout 600 bash -c './scripts/feeds update -a'
-
-
-
-    - name: Install feeds
-
-      run: timeout 600 bash -c 'cd openwrt && ./scripts/feeds install -a'
-
-
-
-    - name: Apply custom config
-
-      env:
-
-        INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
-
-        ROOTFS_SIZE: ${{ github.event.inputs.rootfs_size }}
-
-        GH_TOKEN: ${{ github.token }}
-
-      run: |
-
-        [ -e files ] && mv files openwrt/files
-
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-
-        cd openwrt
-
-        timeout 120 make defconfig
-
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-
-        timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
-
-
-
-    - name: Download sources
-
-      working-directory: /workdir/openwrt
-
-      run: |
-
-        echo "=== 下载前 ==="
-
-        df -hT .
-
-        timeout 1800 make download -j$(nproc) V=s
-
-        echo "=== 下载后 ==="
-
-        df -hT .
-
-
-
-    - name: Save dl cache
-
-      if: success()
-
-      continue-on-error: true
-
-      uses: actions/cache/save@v5
-
-      with:
-
-        path: /workdir/openwrt/dl
-
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
-
-
-
-    - name: Compile the firmware
-
-      id: compile
-
-      working-directory: /workdir/openwrt
-
-      env:
-
-        CCACHE_DIR: /home/runner/.ccache
-
-      run: |
-
-        mkdir -p "$CCACHE_DIR"
-
-        echo "$(nproc) thread compile"
-
-        if ! GITHUB_ENV=/dev/null timeout 14400 make -j$(nproc) V=s; then
-
-          echo "Parallel build failed, retrying with single thread..."
-
-          GITHUB_ENV=/dev/null timeout 28800 make -j1 V=s || exit $?
-
-        fi
-
-
-
-    - name: ccache stats & maintenance
-
-      if: always()
-
-      run: |
-
-        echo "=== ccache stats ==="
-
-        ccache -s 2>/dev/null || true
-
-        # ccache 超过 6GB 时清理，避免 GitHub 10GB 限额驱逐
-
-        SIZE=$(ccache -s 2>/dev/null | grep -i 'cache size' | grep -oP '[\d.]+(?=\s*G)' || echo "0")
-
-        if [ -n "$SIZE" ] && [ "$(echo "$SIZE > 6" | bc 2>/dev/null)" = "1" ]; then
-
-          echo "ccache exceeds 6GB ($SIZE GB), clearing..."
-
-          ccache -C 2>/dev/null || true
-
-        fi
-
-
-
-    - name: Verify binary injection
-
-      run: |
-
-        MANIFEST="$GITHUB_WORKSPACE/binary-manifest.json"
-
-        if [ ! -f "$MANIFEST" ]; then
-
-          echo "No binary-manifest.json found, skipping verification"
-
-          exit 0
-
-        fi
-
-        SKIPPED=$(jq -r '.summary.total_skipped // 0' "$MANIFEST")
-
-        if [ "$SKIPPED" -gt 0 ]; then
-
-          echo "⚠ $SKIPPED package(s) were skipped during binary injection:" >> $GITHUB_STEP_SUMMARY
-
-          jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key): \(.value.source)"' "$MANIFEST" >> $GITHUB_STEP_SUMMARY
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "" >> "$GITHUB_WORKSPACE/release.txt"
-
-          echo "⚠ 以下第三方包未成功注入:" >> "$GITHUB_WORKSPACE/release.txt"
-
-          jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key)"' "$MANIFEST" >> "$GITHUB_WORKSPACE/release.txt"
-
-          echo "⚠ 二进制注入共 $SKIPPED 个包失败" >> "$GITHUB_WORKSPACE/release.txt"
-
-        else
-
-          echo "All binary packages injected successfully."
-
-        fi
-
-
-
-    - name: Organize & Release
-
-      if: env.UPLOAD_RELEASE == 'true' && success()
-
-      env:
-
-        GH_TOKEN: ${{ github.token }}
-
-      run: |
-
-        cd /workdir/openwrt/bin/targets/*/*
-
-        rm -rf packages
-
-        FILES=""
-
-        for f in ./*squashfs-combined-efi.img.gz ./*.manifest ./*.bom.cdx.json ./*.kernel.bin ./sha256sums ./config.buildinfo ./feeds.buildinfo ./profiles.json; do
-
-          [ -f "$f" ] && FILES="$FILES $f"
-
-        done
-
-        gh release create "immortalwrt-24.10.6-${{ github.run_number }}" \
-
-          --repo ${{ github.repository }} \
-
-          --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
-
-          --notes-file "$GITHUB_WORKSPACE/release.txt" \
-
-          $FILES
-
-        echo "=== 清理旧 Release ==="
-
-        gh release list --limit 100 --json tagName --jq '.[].tagName' \
-
-          | tail -n +4 \
-
-          | while read tag; do
-
-              [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
-
-            done
-
+name: Build ImmortalWrt 24.10.6 x86_64
+
+on:
+  workflow_dispatch:
+    inputs:
+      rootfs_size:
+        description: 'Rootfs size (MB)'
+        required: true
+        default: '4096'
+      include_docker:
+        description: 'Include Docker'
+        required: true
+        default: 'yes'
+        type: choice
+        options:
+          - 'yes'
+          - 'no'
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: v24.10.6
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 540
+
+    steps:
+    - name: Prepare environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        echo "=== 释放磁盘空间 ==="
+        sudo rm -rf /opt/hostedtoolcache /usr/share/dotnet /usr/local/lib/android /usr/local/share/powershell /usr/local/.ghcup /usr/local/julia* /opt/ghc
+        sudo docker image prune --all --force 2>/dev/null || true
+        sudo swapoff -a 2>/dev/null || true
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none 2>/dev/null
+        sudo mkswap /swapfile 2>/dev/null && sudo swapon /swapfile 2>/dev/null
+        echo "=== 安装构建依赖 ==="
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+        timeout 120 sudo apt-get update -y || {
+          echo "apt-get update timeout, retrying..."
+          timeout 120 sudo apt-get update -y
+        }
+        timeout 300 sudo apt-get install -y --no-install-recommends \
+          ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache clang cmake cpio curl device-tree-compiler e2fsprogs fastjar flex gawk gettext \
+          gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
+          libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev \
+          libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev \
+          lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf \
+          python3 python3-pip python3-pyelftools python3-setuptools qemu-utils re2c rsync \
+          scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto \
+          xxd zlib1g-dev zstd
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+        df -hT /
+
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        timeout 300 git clone $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Restore dl cache
+      id: restore-dl
+      uses: actions/cache/restore@v5
+      with:
+        path: /workdir/openwrt/dl
+        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+        restore-keys: |
+          dl-${{ env.REPO_BRANCH }}-
+
+    - name: Get date for ccache key
+      id: ccache-date
+      run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
+
+    - name: ccache cache
+      uses: actions/cache@v4
+      with:
+        path: /home/runner/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+        restore-keys: |
+          ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-
+          ccache-${{ env.REPO_BRANCH }}-
+
+    - name: Configure feeds
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        timeout 60 $GITHUB_WORKSPACE/$DIY_P1_SH
+        timeout 600 bash -c './scripts/feeds update -a'
+
+    - name: Install feeds
+      run: timeout 600 bash -c 'cd openwrt && ./scripts/feeds install -a'
+
+    - name: Apply custom config
+      env:
+        INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
+        ROOTFS_SIZE: ${{ github.event.inputs.rootfs_size }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        [ -e files ] && mv files openwrt/files
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        cd openwrt
+        timeout 120 make defconfig
+        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
+        timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: Download sources
+      working-directory: /workdir/openwrt
+      run: |
+        echo "=== 下载前 ==="
+        df -hT .
+        timeout 1800 make download -j$(nproc) V=s
+        echo "=== 下载后 ==="
+        df -hT .
+
+    - name: Save dl cache
+      if: success()
+      continue-on-error: true
+      uses: actions/cache/save@v5
+      with:
+        path: /workdir/openwrt/dl
+        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+
+    - name: Compile the firmware
+      id: compile
+      working-directory: /workdir/openwrt
+      env:
+        CCACHE_DIR: /home/runner/.ccache
+      run: |
+        mkdir -p "$CCACHE_DIR"
+        echo "$(nproc) thread compile"
+        if ! GITHUB_ENV=/dev/null timeout 14400 make -j$(nproc) V=s; then
+          echo "Parallel build failed, retrying with single thread..."
+          GITHUB_ENV=/dev/null timeout 28800 make -j1 V=s || exit $?
+        fi
+
+    - name: ccache stats & maintenance
+      if: always()
+      run: |
+        echo "=== ccache stats ==="
+        ccache -s 2>/dev/null || true
+        # ccache 超过 6GB 时清理，避免 GitHub 10GB 限额驱逐
+        SIZE=$(ccache -s 2>/dev/null | grep -i 'cache size' | grep -oP '[\d.]+(?=\s*G)' || echo "0")
+        if [ -n "$SIZE" ] && [ "$(echo "$SIZE > 6" | bc 2>/dev/null)" = "1" ]; then
+          echo "ccache exceeds 6GB ($SIZE GB), clearing..."
+          ccache -C 2>/dev/null || true
+        fi
+
+    - name: Verify binary injection
+      run: |
+        MANIFEST="$GITHUB_WORKSPACE/binary-manifest.json"
+        if [ ! -f "$MANIFEST" ]; then
+          echo "No binary-manifest.json found, skipping verification"
+          exit 0
+        fi
+        SKIPPED=$(jq -r '.summary.total_skipped // 0' "$MANIFEST")
+        if [ "$SKIPPED" -gt 0 ]; then
+          echo "⚠ $SKIPPED package(s) were skipped during binary injection:" >> $GITHUB_STEP_SUMMARY
+          jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key): \(.value.source)"' "$MANIFEST" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_WORKSPACE/release.txt"
+          echo "⚠ 以下第三方包未成功注入:" >> "$GITHUB_WORKSPACE/release.txt"
+          jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key)"' "$MANIFEST" >> "$GITHUB_WORKSPACE/release.txt"
+          echo "⚠ 二进制注入共 $SKIPPED 个包失败" >> "$GITHUB_WORKSPACE/release.txt"
+        else
+          echo "All binary packages injected successfully."
+        fi
+
+    - name: Organize & Release
+      if: env.UPLOAD_RELEASE == 'true' && success()
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        cd /workdir/openwrt/bin/targets/*/*
+        rm -rf packages
+        FILES=""
+        for f in ./*squashfs-combined-efi.img.gz ./*.manifest ./*.bom.cdx.json ./*.kernel.bin ./sha256sums ./config.buildinfo ./feeds.buildinfo ./profiles.json; do
+          [ -f "$f" ] && FILES="$FILES $f"
+        done
+        gh release create "immortalwrt-24.10.6-${{ github.run_number }}" \
+          --repo ${{ github.repository }} \
+          --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
+          --notes-file "$GITHUB_WORKSPACE/release.txt" \
+          $FILES
+        echo "=== 清理旧 Release ==="
+        gh release list --limit 100 --json tagName --jq '.[].tagName' \
+          | tail -n +4 \
+          | while read tag; do
+              [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
+            done
