@@ -28,7 +28,7 @@
 11. Compile firmware      # make -j$(nproc) V=s
 12. ccache stats           # ccache -s + 超 6GB 清理
 13. Verify binary inject  # 检查 binary-manifest.json 的 skipped 包
-14. Release firmware      # 上传 img.gz + sysupgrade.bin，保留 3 个
+14. Release firmware      # 上传 img.gz + sysupgrade.bin.gz，保留 3 个
 ```
 
 ---
@@ -100,7 +100,8 @@ continue-on-error: true
 | `scripts/verify-kernel-deps.sh` | 校验 BINARY 包的内核依赖 (.config 启用检查) |
 | `scripts/verify-pkg-consistency.sh` | 校验 BINARY 包一致性 (LuCI 配对 + 运行时依赖闭环) |
 | `scripts/generate-provides.sh` | 动态生成 PROVIDES 虚拟包 Makefile (替代手动维护) |
-| `files/etc/sysupgrade.conf` | sysupgrade 保留路径 (/etc/ipk-cache/ + 安装日志) |
+| `scripts/sort-ipk-deps.py` | IPK 依赖拓扑排序 (Kahn 算法 → install_order.list) |
+| `files/etc/sysupgrade.conf` | sysupgrade 保留安装日志路径 |
 
 ### 包分类
 
@@ -177,8 +178,7 @@ gh-bin 包的二进制兼容性检查：`check_gh_binary_deps()` 自动验证 EL
 
 ```
 99-install-ipk-cache.sh  ← uci-defaults 框架自动执行
-  ├─ 批量安装：opkg install /etc/ipk-cache/*.ipk --force-reinstall --force-overwrite --force-depends
-  ├─ 失败重试最多 3 次，全部成功自删
+  ├─ 批量安装：优先使用 install_order.list（DAG）, 降级为前缀分层排序 (core → luci-app → luci-theme → luci-i18n)
   └─ 日志 /etc/config/ipk-install.log
 ```
 
