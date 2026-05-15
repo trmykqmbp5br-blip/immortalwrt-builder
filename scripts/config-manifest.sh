@@ -72,6 +72,21 @@ BINARY_SOURCE[luci-i18n-docker-zh-cn]="feed:luci"
 BINARY_SOURCE[luci-app-dockerman]="feed:luci"
 BINARY_SOURCE[luci-i18n-dockerman-zh-cn]="feed:luci"
 
+# ==========================================
+# 声明式内核依赖映射 (用于 gh-bin 包或隐式依赖兜底)
+# 格式: BINARY_KERNEL_DEPS[包名]="CONFIG_XXX CONFIG_YYY"
+# ==========================================
+declare -A BINARY_KERNEL_DEPS
+
+# Docker 需要的内核模块（ipk 声明中已有部分，这里做强制兜底）
+BINARY_KERNEL_DEPS[docker]="CONFIG_VETH CONFIG_NETFILTER_XT_MATCH_ADDRTYPE CONFIG_IP_NF_TARGET_MASQUERADE"
+
+# OpenClash 等需要 TUN 模块 (如果是 gh-bin 引入)
+# BINARY_KERNEL_DEPS[luci-app-openclash]="CONFIG_TUN"
+
+# 其他 gh-bin 纯二进制程序
+# BINARY_KERNEL_DEPS[包名]="CONFIG_XXX"
+
 # --- 商店（暂无稳定 ipk 源，暂不包含） ---
 # BINARY_SOURCE[luci-app-store]="feed:packages"
 

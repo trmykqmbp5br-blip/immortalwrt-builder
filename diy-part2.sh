@@ -75,7 +75,13 @@ if [ -f "target/linux/x86/image/Makefile" ]; then
         echo "  WARNING: x86 boot fix failed"
 fi
 
-# ============= 9. 二次 make download =============
+# ============= 9. 校验 BINARY 包内核依赖 =============
+if [ -f "$SCRIPTS_DIR/verify-kernel-deps.sh" ]; then
+    echo "=== 校验 BINARY 包内核依赖 ==="
+    bash "$SCRIPTS_DIR/verify-kernel-deps.sh" || exit 1
+fi
+
+# ============= 10. 二次 make download =============
 if [ -d package/ ]; then
     echo "=== 二次下载新增包源码 ==="
     make download -j$(nproc) 2>/dev/null || \
