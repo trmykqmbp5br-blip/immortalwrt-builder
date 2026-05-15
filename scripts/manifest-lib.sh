@@ -18,9 +18,13 @@ apply_manifest() {
     local source_list="$3"
     local pkg
 
-    # 二进制注入包：.config 禁用（源码不编译，只走 ipk 注入）
+    # feed 源（feed:）保留 .config 原样（若 =y 则同时走源码编译 + 注入）
+    # 非 feed 源（gh:/gh-bin:/store:）禁用 .config，只走 ipk 注入
     for pkg in $binary_list; do
-        sed -i "s/.*CONFIG_PACKAGE_${pkg}.*/# CONFIG_PACKAGE_${pkg} is not set/" .config 2>/dev/null || true
+        local src="${BINARY_SOURCE[$pkg]:-}"
+        case "$src" in feed:*) ;; *)
+            sed -i "s/.*CONFIG_PACKAGE_${pkg}.*/# CONFIG_PACKAGE_${pkg} is not set/" .config 2>/dev/null || true
+        ;; esac
     done
 
     # 排除包：.config 禁用，不注入
