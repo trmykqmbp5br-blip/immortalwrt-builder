@@ -223,6 +223,30 @@ BINARY_SOURCE[包名]="gh-bin:owner/repo:pattern_regex:target_dir"
 
 ---
 
+---
+## 维护注意事项
+
+### 1. 新增 BINARY 包时更新 PROVIDES
+
+`package/custom-provides/Makefile` 的 `PROVIDES:=` 列表必须包含所有 BINARY 包名。
+新增 BINARY 包后，一定要同时把包名追加到该列表中，否则编译期其他包 `depends on` 这个包时会报依赖断裂。
+
+```bash
+# 在 PROVIDES:= 后面追加包名，空格分隔
+PROVIDES:=... 新增的包名
+```
+
+### 2. 绝对不要在 apply_manifest 之后执行 make defconfig
+
+`apply_manifest()` 使用 `./scripts/config --disable` 禁用了所有 BINARY 包。
+如果之后再执行 `make defconfig`，Kconfig 引擎会根据 `depends on`/`select` 关系把这些禁用的包重新启用（"复活"），
+导致这些包被编译，与"开机装 ipk"的意图冲突。
+
+**正确顺序：**
+```
+make defconfig → apply_manifest → (绝不再 defconfig)
+```
+
 ## 常见问题
 
 ### 为什么 feed 包也要开机装 ipk，不编译？
