@@ -69,6 +69,14 @@ continue-on-error: true
     restore-keys: |
       ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-
       ccache-${{ env.REPO_BRANCH }}-
+
+# 构建失败时单独保存（带 -failed-{run_number} 后缀，避免与成功缓存冲突）
+- name: Save ccache on failure
+  if: failure()
+  uses: actions/cache/save@v5
+  with:
+    path: /home/runner/.ccache
+    key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
 ```
 
 **关键**：OpenWrt 的 `rules.mk` 会 export `CCACHE_DIR`，覆盖环境变量。`.config` 中 `CONFIG_CCACHE_DIR` 为空时 → export `CCACHE_DIR=""` → ccache 使用 XDG 默认 `~/.cache/ccache`，与 GitHub cache action 路径不匹配。必须显式设为 `/home/runner/.ccache`（`diy-part2.sh` 在 make defconfig 之前注入）。
