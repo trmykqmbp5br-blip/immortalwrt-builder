@@ -81,7 +81,13 @@ if [ -f "$SCRIPTS_DIR/verify-kernel-deps.sh" ]; then
     bash "$SCRIPTS_DIR/verify-kernel-deps.sh" || exit 1
 fi
 
-# ============= 10. 二次 make download =============
+# ============= 10. 校验 BINARY 包前后端一致性 =============
+if [ -f "$SCRIPTS_DIR/verify-pkg-consistency.sh" ]; then
+    echo "=== 校验 BINARY 包前后端一致性 ==="
+    bash "$SCRIPTS_DIR/verify-pkg-consistency.sh" || exit 1
+fi
+
+# ============= 10. 校验 BINARY 包前后端一致性 =============
 if [ -d package/ ]; then
     echo "=== 二次下载新增包源码 ==="
     make download -j$(nproc) 2>/dev/null || \

@@ -141,5 +141,18 @@ CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE luci-app-fchomo"
 # 注意：apply_manifest() 不在本文件中调用，由 diy-part2.sh 在 make defconfig 之后执行
 # 这是为了确保 scripts/config --disable 不会被后续的 make defconfig 复活 BINARY 包
 
+# ==========================================
+# 强制 LuCI 配对声明 (防呆：防止装了核心包没装界面)
+# 格式：核心包名。只要核心包在 BINARY 清单中，luci-app-核心包名 也必须在清单中。
+# ==========================================
+BINARY_LUCI_MANDATORY=(
+    "smartdns"
+    "docker"
+    "ttyd"
+    "acme"
+    "upnp"
+    # 如果后续新增带界面的包，在这里追加
+)
+
 # 导出 BINARY_PACKAGES（供 prepare-binary.sh 消费）
 export BINARY_PACKAGES="$CONFIG_MANIFEST_BINARY"
