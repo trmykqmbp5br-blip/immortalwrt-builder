@@ -48,9 +48,9 @@ if: always()
 continue-on-error: true
 ```
 
-- 每次构建（包括失败）都保存一份 dl 缓存，key 带 `run_id`
+- **key 基于 feeds 配置哈希**（`hashFiles('feeds.conf.default', 'diy-part1.sh')`），feeds 不变则不产生新缓存条目
 - 恢复时先精确匹配，再用前缀回退，总能找到最近的有效缓存
-- 历史缓存被 GitHub 自动驱逐（限额 10GB）时不影响最新缓存
+- 历史缓存被 GitHub 自动驱逐（限额 10GB）
 
 ### ccache 缓存（编译缓存）
 
@@ -147,11 +147,9 @@ diy-part2.sh → kernel-config/runtime patches
 
 ```
 99-install-ipk-cache.sh  ← uci-defaults 框架自动执行
-  ├─ 排序：核心包 → luci-app-* → luci-i18n-*/luci-theme-*
-  ├─ opkg install --force-reinstall --force-overwrite --force-depends
-  ├─ 失败包写入 /etc/ipk-cache/.retry_count，最多重试 3 次
-  ├─ 全部成功 → exit 0 → 脚本自删
-  └─ 有失败 → exit 1 → 保留脚本下次启动重试
+  ├─ 批量安装：opkg install /etc/ipk-cache/*.ipk --force-reinstall --force-overwrite --force-depends
+  ├─ 失败重试最多 3 次，全部成功自删
+  └─ 日志 /etc/config/ipk-install.log
 ```
 
 ---

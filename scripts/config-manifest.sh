@@ -12,6 +12,8 @@
 # EXCLUDE — 彻底禁用，不编译不安装。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 加载 BINARY 包扁平列表（用于 PROVIDES 虚拟包生成）
+. "$SCRIPT_DIR/binary-packages.sh"
 . "$SCRIPT_DIR/manifest-lib.sh"
 
 declare -A BINARY_SOURCE

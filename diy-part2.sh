@@ -1,15 +1,14 @@
 #!/bin/bash
 # diy-part2.sh — 自定义配置编排器
 # 由 GitHub Actions 在 openwrt/ 目录下调用（CWD = openwrt/）
-# 按序加载 scripts/ 下的领域模块
 #
 # 执行顺序：
-#   1. 内核/运行时补丁
-#   2. make defconfig（计算所有 Kconfig 依赖）
-#   3. apply_manifest（scripts/config --disable BINARY 包，--enable SOURCE 包）
-#      重要：之后绝不再执行 make defconfig，否则 BINARY 禁用会被 Kconfig 依赖复活
-#   4. 下载 ipk / 二次 make download
-#   5. 编译
+#   1. 内核/运行时补丁 + 修复 Makefile
+#   2. 生成 PROVIDES 虚拟包（custom-binary-provides）
+#   3. make defconfig（计算所有 Kconfig 依赖）
+#   4. apply_manifest（./scripts/config --disable BINARY/EXCLUDE，--enable SOURCE + PROVIDES 虚拟包）
+#      绝不再执行 make defconfig，否则 BINARY 禁用会被依赖树复活
+#   5. 下载 ipk / 二次 make download
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$REPO_ROOT/scripts"
@@ -29,44 +28,52 @@ done
 . "$SCRIPTS_DIR/runtime-musl32.sh"
 . "$SCRIPTS_DIR/runtime-glibc32.sh"
 
-# ============= 3. make defconfig — 让 OpenWrt 自动补全 Kconfig 依赖 =============
-# 此时 BINARY/SOURCE 包尚未被 apply_manifest 修改，
-# make defconfig 能看到所有包的依赖关系并正确计算。
-# 这也是 CCACHE_DIR 注入的最佳时机——defconfig 会保留已设值。
+# ============= 3. 生成 PROVIDES 虚拟包 =============
+# 读取 BINARY 包列表，生成 custom-binary-provides 的 PROVIDES 行
+# 这个包编译为空，但通过 PROVIDES 让依赖系统以为这些包已存在
+. "$SCRIPTS_DIR/binary-packages.sh" 2>/dev/null || true
+mkdir -p package/custom-provides
+if [ -f "$REPO_ROOT/package/custom-provides/Makefile" ]; then
+    sed "s/PROVIDES:=/PROVIDES:=$BINARY_PACKAGES_FLAT/" \
+        "$REPO_ROOT/package/custom-provides/Makefile" > package/custom-provides/Makefile
+    echo "  Generated package/custom-provides/Makefile with $(echo $BINARY_PACKAGES_FLAT | wc -w) providers"
+fi
+
+# ============= 4. make defconfig =============
+# CCACHE_DIR 注入：确保 OpenWrt 的 rules.mk export 的路径与 cache action 一致
 sed -i '/^CONFIG_CCACHE_DIR=/d' .config 2>/dev/null || true
 echo 'CONFIG_CCACHE_DIR="/home/runner/.ccache"' >> .config
 make defconfig
 
-# ============= 4. apply_manifest — 统一包配置 =============
-# 使用 scripts/config --disable（精确 key 操作，非 sed 子串匹配）
-# 禁用所有 BINARY/EXCLUDE 包，启用 SOURCE 包。
-# 【关键】之后绝不再执行 make defconfig，否则 Kconfig 引擎会根据
-#   depends on/select 关系把 BINARY 包复活。
+# ============= 5. apply_manifest =============
+# 使用 scripts/config --disable BINARY/EXCLUDE 包，--enable SOURCE 包
+# 【关键】之后绝不再执行 make defconfig
 . "$SCRIPTS_DIR/config-manifest.sh"
 apply_manifest "$CONFIG_MANIFEST_BINARY" "$CONFIG_MANIFEST_EXCLUDE" "$CONFIG_MANIFEST_SOURCE"
 
-# ============= 5. Rootfs 大小调整 =============
+# 启用 PROVIDES 虚拟包（编译空包但 PROVIDES 所有 BINARY 包）
+./scripts/config --enable "CONFIG_PACKAGE_custom-binary-provides" 2>/dev/null || true
+
+# ============= 6. Rootfs 大小调整 =============
 if [ -n "${ROOTFS_SIZE:-}" ] && [ "$ROOTFS_SIZE" != "4096" ]; then
     echo "Setting rootfs size to ${ROOTFS_SIZE} MB..."
     sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=[0-9]*/CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}/" .config
 fi
 
-# ============= 6. 二进制 ipk 下载 =============
+# ============= 7. 二进制 ipk 下载 =============
 if [ -f "$REPO_ROOT/shell/prepare-binary.sh" ]; then
     . "$REPO_ROOT/shell/prepare-binary.sh"
     prepare_binary_packages "$REPO_ROOT/files" "$BINARY_PACKAGES"
 fi
 
-# ============= 7. x86 镜像 boot 目录修复 =============
+# ============= 8. x86 镜像 boot 目录修复 =============
 if [ -f "target/linux/x86/image/Makefile" ]; then
     echo "=== 修复 x86 镜像 boot 目录源路径 ==="
     python3 "$REPO_ROOT/shell/fix-x86-boot.py" "target/linux/x86/image/Makefile" || \
         echo "  WARNING: x86 boot fix failed"
 fi
 
-# ============= 8. 二次 make download =============
-# 某些包（如 kenzo/small feed 中的）可能在上次 make download 之后才添加，
-# 这里补下载。不阻塞——下载失败会在后面 make 时重试。
+# ============= 9. 二次 make download =============
 if [ -d package/ ]; then
     echo "=== 二次下载新增包源码 ==="
     make download -j$(nproc) 2>/dev/null || \

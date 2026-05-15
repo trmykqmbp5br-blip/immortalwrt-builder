@@ -195,6 +195,9 @@ prepare_binary_packages() {
 #   - 每包最多重试 3 次
 #   - --force-reinstall --force-overwrite 确保强制覆盖
 # ================================================================
+# ================================================================
+# generate_boot_script — 生成开机安装脚本（批量安装 + 重试）
+# ================================================================
 generate_boot_script() {
     local FILES_DIR="$1"
     local UCI_SCRIPT="$FILES_DIR/etc/uci-defaults/99-install-ipk-cache.sh"
@@ -202,90 +205,33 @@ generate_boot_script() {
 
     cat > "$UCI_SCRIPT" << 'UCIEOF'
 #!/bin/sh
-# 99-install-ipk-cache.sh — 首次启动安装预置 ipk
-# prepare-binary.sh 自动生成，全部成功后才自删
-#
-# 安装顺序：按名称分组，保证核心包先于界面包安装
-# 重试：每包最多 3 次，失败继续，不阻塞后续
-
+# 99-install-ipk-cache.sh — 批量安装预置 ipk
 IPK_DIR="/etc/ipk-cache"
-RETRY_FILE="/etc/ipk-cache/.retry_count"
-MAX_RETRY=3
 LOG="/etc/config/ipk-install.log"
-
+MAX_RETRY=3
 [ -d "$IPK_DIR" ] || exit 0
 
-# 加载重试计数
-declare -A RETRIES
-[ -f "$RETRY_FILE" ] && . "$RETRY_FILE"
-
-# 收集 ipk 列表，按优先级排序：
-# 1. 非 luci 开头包（核心依赖）
-# 2. luci-app-*（主应用）
-# 3. luci-i18n-* / luci-theme-*（界面/翻译）
-SORTED=""
-for grp in "a" "b" "c"; do
-    for ipk in "$IPK_DIR"/*.ipk; do
-        [ -f "$ipk" ] || continue
-        base=$(basename "$ipk" .ipk)
-        case "$grp" in
-            a) case "$base" in luci-app-*|luci-i18n-*|luci-theme-*) continue;; esac ;;
-            b) case "$base" in luci-app-*) ;; *) continue;; esac ;;
-            c) case "$base" in luci-i18n-*|luci-theme-*) ;; *) continue;; esac ;;
-        esac
-        SORTED="$SORTED $ipk"
-    done
+tries=0
+while [ $tries -lt $MAX_RETRY ]; do
+    echo "[$(date)] attempt $((tries+1))/$MAX_RETRY" >> "$LOG"
+    opkg install "$IPK_DIR"/*.ipk --force-reinstall --force-overwrite --force-depends >> "$LOG" 2>&1 && break
+    tries=$((tries + 1))
 done
 
-echo "[$(date)] Starting ipk install (max ${MAX_RETRY} retries each)..." >> "$LOG"
-echo "  Order: core -> app -> i18n" >> "$LOG"
-
-all_ok=0
-for ipk in $SORTED; do
-    base=$(basename "$ipk" .ipk)
-    cnt="${RETRIES[$base]:-0}"
-
-    if [ "$cnt" -ge "$MAX_RETRY" ]; then
-        echo "  SKIP $base (failed ${cnt} times, exceeded max)" >> "$LOG"
-        all_ok=1
-        continue
-    fi
-
-    # 尝试安装
-    opkg install "$ipk" --force-reinstall --force-overwrite --force-depends >> "$LOG" 2>&1
-    rc=$?
-
-    if [ "$rc" -eq 0 ]; then
-        rm -f "$ipk"
-        unset RETRIES[$base]
-        echo "  OK  $base" >> "$LOG"
-    else
-        RETRIES[$base]=$((cnt + 1))
-        all_ok=1
-        echo "  FAIL $base (attempt $((cnt+1))/$MAX_RETRY)" >> "$LOG"
-    fi
-done
-
-# 保存重试计数供下次启动
-{
-    echo "# retry counters"
-    for k in "${!RETRIES[@]}"; do
-        echo "RETRIES[$k]=${RETRIES[$k]}"
-    done
-} > "$RETRY_FILE"
-
-if [ "$all_ok" -eq 0 ]; then
-    echo "[$(date)] All ipk installed successfully, cleaning up..." >> "$LOG"
-    rm -f "$RETRY_FILE"
-    exit 0  # uci-defaults 框架自动删脚本
+if [ $tries -lt $MAX_RETRY ]; then
+    rm -f "$IPK_DIR"/*.ipk "$IPK_DIR"/.retry_count 2>/dev/null
+    echo "[$(date)] All ipk installed" >> "$LOG"
+    exit 0
 else
-    echo "[$(date)] Some ipk installs still pending after this boot" >> "$LOG"
-    exit 1  # 保留脚本下次重试
+    echo "[$(date)] Failed after $MAX_RETRY attempts" >> "$LOG"
+    exit 1
 fi
 UCIEOF
     chmod +x "$UCI_SCRIPT"
     echo "  uci-defaults script created: $UCI_SCRIPT"
 }
+
+
 
 # ================================================================
 # generate_manifest — 生成注入结果清单
