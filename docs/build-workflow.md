@@ -38,11 +38,10 @@
 ### dl 缓存（源码包缓存）
 
 ```yaml
-# 恢复
-key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
+# key 基于 feeds 配置哈希，feeds 不变则不产生新缓存条目
+key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
 restore-keys: |
   dl-${{ env.REPO_BRANCH }}-
-  dl-${{ env.REPO_BRANCH }}
 
 # 保存（无条件）
 if: always()
@@ -83,7 +82,6 @@ continue-on-error: true
 | `scripts/config-manifest.sh` | 声明 BINARY_SOURCE（每包的下载来源）和包清单 |
 | `scripts/manifest-lib.sh` | `apply_manifest()` 写入 .config（禁用/启用） |
 | `shell/prepare-binary.sh` | 下载 ipk 到 `files/etc/ipk-cache/`，生成 uci-defaults 脚本 |
-| `shell/prepare-store.sh` | 处理 iStore .run 自解压包 |
 | `diy-part2.sh` | 编排器，按序执行上述脚本 |
 
 ### 包分类
@@ -94,8 +92,7 @@ BINARY（第三方包，不编译，开机装 ipk）
 ├── feed:packages   — USTC 镜像 /releases/24.10.6/packages/x86_64/packages/
 ├── feed:base       — USTC 镜像 /releases/24.10.6/packages/x86_64/base/
 ├── gh:owner/repo   — GitHub Releases（ipk 匹配）
-├── gh-bin:         — GitHub Releases（tar.gz 提取 ELF 到 files/）
-└── store:special   — iStore 商店（prepare-store.sh 处理）
+└── gh-bin:         — GitHub Releases（tar.gz 提取 ELF 到 files/）
 
 SOURCE（显式启用源码编译的包，很少用）
 └─ 仅用于需要在 .config 中 =y 但不属于 DEFAULT_PACKAGES 的 feed 包
@@ -107,12 +104,14 @@ EXCLUDE（禁用，不编译不安装）
 ### manifest-lib.sh 的 apply_manifest()
 
 ```
-BINARY 包 → .config 中设为 "is not set" → make 跳过编译
-EXCLUDE 包 → .config 中设为 "is not set" → make 跳过编译
-SOURCE 包 → .config 中设为 =y → make 正常编译
+BINARY 包 → ./scripts/config --disable → make 跳过编译
+EXCLUDE 包 → ./scripts/config --disable → make 跳过编译
+SOURCE 包 → ./scripts/config --enable → make 正常编译
 ```
 
-sed 使用行尾锚定 `^CONFIG_PACKAGE_${pkg}=[ym]$`，避免 `ddns-scripts` 误伤 `ddns-scripts-aliyun`。
+使用 OpenWrt 官方 `scripts/config` 工具（精确 key 操作，无 sed 子串误伤）。
+
+调用时机：必须在 make defconfig 之后执行，且之后绝不再执行 make defconfig。否则 Kconfig 引擎会根据 depends on/select 关系把 BINARY 包复活。
 
 ---
 
@@ -126,31 +125,33 @@ config-manifest.sh
   ├─ BINARY 清单 = smartdns luci-app-openclash docker ...
   └─ apply_manifest()  →  写入 .config（禁用所有 BINARY 包）
 
-diy-part2.sh → prepare-binary.sh
-  ├─ feed:packages smartdns → download_feed_pkg()
-  │   └─ curl https://mirrors.ustc.edu.cn/immortalwrt/releases/24.10.6/packages/x86_64/packages/Packages.gz
-  │     → grep smartdns → 下载 smartdns_*.ipk → files/etc/ipk-cache/
-  ├─ gh:vernesong/OpenClash → download_gh_release()
-  │   └─ GitHub API → 下载 luci-app-openclash_*.ipk → files/etc/ipk-cache/
-  ├─ gh-bin: → download_gh_binary() → 解压 tar.gz 提取 ELF → files/usr/bin/
-  └─ 生成 uci-defaults/99-install-ipk-cache.sh
-
-diy-part2.sh → prepare-store.sh（仅 luci-app-store）
-  └─ git clone wukongdaily/store → 解压 .run → 提取 .ipk → files/etc/ipk-cache/
-
-末尾 make defconfig → OpenWrt 自动处理 Kconfig 依赖
+diy-part2.sh → kernel-config/runtime patches
+  → CCACHE_DIR 注入 .config
+  → make defconfig（OpenWrt 计算 Kconfig 依赖）
+  → config-manifest.sh + apply_manifest()
+      ├─ scripts/config --disable（BINARY 包，精确 key，无 sed 误伤）
+      └─ scripts/config --enable（SOURCE 包）
+  → prepare-binary.sh
+      ├─ feed:packages smartdns → download_feed_pkg()
+      │   └─ curl USTC 镜像 → 下载 smartdns_*.ipk → files/etc/ipk-cache/
+      ├─ gh:vernesong/OpenClash → download_gh_release()
+      │   └─ GitHub API → 下载 luci-app-openclash_*.ipk → files/etc/ipk-cache/
+      ├─ gh-bin: → download_gh_binary() → 解压 tar.gz 提取 ELF → files/usr/bin/
+      └─ 生成 uci-defaults/99-install-ipk-cache.sh
+  → 二次 make download（补新添加包的源码）
 ```
+
+【关键】apply_manifest 必须在 make defconfig 之后执行，且之后绝不再执行 make defconfig。
 
 ### 首次启动阶段（uci-defaults）
 
 ```
 99-install-ipk-cache.sh  ← uci-defaults 框架自动执行
-  ├─ 遍历 /etc/ipk-cache/*.ipk
-  ├─ opkg install xxx.ipk --force-depends
-  │   └─ 跳过依赖检查，运行时打包进来的编译包已满足 deps
-  ├─ 安装成功 → 删除 .ipk 文件
-  ├─ 安装失败 → 脚本非零退出 → uci-defaults 保留脚本下次重试
-  └─ 日志写入 /etc/config/ipk-install.log
+  ├─ 排序：核心包 → luci-app-* → luci-i18n-*/luci-theme-*
+  ├─ opkg install --force-reinstall --force-overwrite --force-depends
+  ├─ 失败包写入 /etc/ipk-cache/.retry_count，最多重试 3 次
+  ├─ 全部成功 → exit 0 → 脚本自删
+  └─ 有失败 → exit 1 → 保留脚本下次启动重试
 ```
 
 ---
@@ -168,9 +169,6 @@ BINARY_SOURCE[包名]="gh:owner/repo:pattern_regex"
 
 # GitHub Release binary — 下载 tar.gz，提取 ELF 到指定目录
 BINARY_SOURCE[包名]="gh-bin:owner/repo:pattern_regex:target_dir"
-
-# iStore 商店 — 由 prepare-store.sh 处理
-BINARY_SOURCE[包名]="store:special"
 ```
 
 ---
@@ -208,7 +206,7 @@ BINARY_SOURCE[包名]="store:special"
 - `luci-app-dockerman` / `luci-i18n-dockerman-zh-cn` → `feed:luci`
 
 ### 商店
-- `luci-app-store` → `store:special`
+（暂未包含，等稳定 ipk 源）
 
 ---
 
@@ -228,4 +226,6 @@ BINARY_SOURCE[包名]="store:special"
 
 ### ccache 为什么之前不生效？
 
-OpenWrt 的 `rules.mk` 中 `export CCACHE_DIR:=$(CONFIG_CCACHE_DIR)` 覆盖了 GitHub Actions 设置的 `CCACHE_DIR` 环境变量。`.config` 中 `CONFIG_CCACHE_DIR=""` 时，export 为 `CCACHE_DIR=""` → ccache 使用 XDG 默认路径 `~/.cache/ccache`，但 GitHub cache action 保存的是 `/home/runner/.ccache` → 两者不匹配。修复：`.config` 中设 `CONFIG_CCACHE_DIR="/home/runner/.ccache"`。
+OpenWrt 的 `rules.mk` 中 `export CCACHE_DIR:=$(CONFIG_CCACHE_DIR)` 覆盖了 GitHub Actions 设置的 `CCACHE_DIR` 环境变量。`.config` 中 `CONFIG_CCACHE_DIR=""` 时，export 为 `CCACHE_DIR=""` → ccache 使用 XDG 默认路径 `~/.cache/ccache`，但 GitHub cache action 保存的是 `/home/runner/.ccache` → 两者不匹配。
+
+修复：diy-part2.sh 在 make defconfig 之前注入 `CONFIG_CCACHE_DIR="/home/runner/.ccache"` 到 .config，make defconfig 保留已设值，确保 OpenWrt 内部 export 的路径与 cache action 一致。
