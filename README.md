@@ -1,186 +1,97 @@
-# ImmortalWrt Builder — 24.10.6 x86_64 (有线网关版)
+# ImmortalWrt Builder — 24.10.6 x86_64 有线网关优化固件
 
-基于 P3TERX/Actions-OpenWrt 模板，为 Intel J5040 软路由定制的 ImmortalWrt 24.10.6 固件。**纯有线网关，无 WiFi 模块。**
+基于 ImmortalWrt 24.10.6 和 GitHub Actions 的自动构建固件，面向 Intel J5040 等 x86_64 软路由，定位为纯有线网关：去 WiFi、精简驱动、聚焦转发与 NAT 性能，并集成双 WAN 负载均衡、SmartDNS、Docker、BBR 等常用功能。构建过程大量使用缓存与二进制注入，在保证可维护性的前提下尽量缩短编译时间。
 
-## 固件特性
+## 固件定位
 
-- ImmortalWrt 24.10.6 x86_64 (kernel 6.6, LLVM 编译)
-- 纯有线网关，已移除所有 WiFi 驱动/固件（ath/mt76/b43/wl 等）
-- IA32_EMULATION（32 位应用支持，musl + glibc 双运行时）
-- 网卡驱动: igc (I225/I226) + e1000e, igb, ixgbe, r8125, r8168, vmxnet3, USB 网卡等
-- mwan3 双 WAN 负载均衡（自动检测网口数 ≥2 时启用）
-- SmartDNS（DoT/DoH/UDP 多上游，去广告规则自动更新）
-- Docker + dockerman（构建时可选择开关）
-- BBR 拥塞控制 (kmod-tcp-bbr)
-- CPU 定频 (luci-app-cpufreq)
-- 默认 IP: 192.168.100.1
-- SSH 密钥登录预置
-- 自动检测网口数量：单网口 DHCP 模式，多网口静态 IP + 双 WAN
-- 安全加固: RELRO Full, FORTIFY_SOURCE, SECCOMP
+- **纯有线网关**：移除所有无线驱动和固件（ath/mt76/b43/wl 等），只保留有线网卡驱动，适合作为旁路/主路由专注转发。
+- **x86_64 + 32 位兼容**：内核启用 IA32_EMULATION，并预置 musl 32 位与 glibc 32 位双运行时，方便运行闭源 32 位程序（如某些网银/驱动插件）。
+- **构建即代码**：全部配置集中在 `.config`、`diy-part1.sh`、`diy-part2.sh` 和 `scripts/` 目录，配合 GitHub Actions 一键构建，方便版本升级与定制。
 
-## 使用方式
+## 核心特性
 
-### GitHub Actions 远程构建
+### 系统
+- ImmortalWrt 24.10.6 x86_64，内核 6.6，部分组件使用 LLVM/Clang 构建。
+- 默认 IP 192.168.100.1，预置 SSH 密钥登录，方便初次部署。
+- 安全加固：RELRO Full、FORTIFY_SOURCE、SECCOMP 等编译选项。
+
+### 网络与多 WAN
+- 网卡驱动：igc (I225/I226)、e1000e、igb、ixgbe、r8125、r8168、vmxnet3 以及常见 USB 有线网卡。
+- **mwan3 双 WAN 负载均衡**：构建脚本根据网口数量自动判断，单网口使用 DHCP，多网口自动配置静态 IP + 双 WAN，无需手动调整。
+
+### DNS 与去广告
+- **SmartDNS**：支持 DoT/DoH/UDP 多上游，内置去广告规则自动更新脚本，兼顾解析速度与广告过滤。
+
+### Docker 与容器
+- **Docker + dockerman**：通过构建参数 `include_docker` 控制是否包含，默认启用，方便在路由器上运行各类容器服务。
+
+### 性能与调优
+- **BBR 拥塞控制**：通过 kmod-tcp-bbr 启用，改善高延迟链路的传输性能。
+- **CPU 定频**：集成 luci-app-cpufreq，可按需调节频率策略，降低功耗或提升性能。
+
+### 32 位应用支持
+
+预置两套 32 位运行时：
+- **musl 32 位**：来自 ImmortalWrt i386 rootfs，提供 `/lib/ld-musl-i386.so.1` 和 `/lib32/*.so`。
+- **glibc 32 位**：来自 Ubuntu 22.04 i386，提供 `/lib/ld-linux.so.2` 和 `/lib32/glibc/*.so`，兼容常见闭源 32 位程序。
+
+提供 `run-i386` 包装脚本，自动识别 musl/glibc 二进制并设置正确的 `LD_LIBRARY_PATH`，避免 32 位程序误加载 64 位库。
+
+## 构建与缓存策略
+
+### GitHub Actions 一键构建
 
 1. Fork 本仓库
-2. Actions → Build ImmortalWrt → Run workflow
-3. 填写参数后触发构建（约 1-2 小时，首次构建需下载全部源码包，后续利用缓存大幅提速）
+2. 在 Actions 中选择 **Build ImmortalWrt** 工作流
+3. 填写 `rootfs_size`、`include_docker` 等参数后触发构建
 4. 构建完成后在 Releases 下载固件
 
-### 刷机与还原
+### 缓存与二进制注入
 
-刷机后**手动**恢复配置备份：
+- **dl 缓存**：基于 `feeds.conf.default` 和 `diy-part1.sh` 的哈希生成 key，仅在构建成功时保存，避免失败缓存污染；同 feeds 配置下复用缓存，加速 `make download`。
+- **ccache**：key 采用"日期 + feeds 哈希"，配合 `CCACHE_MAXSIZE`、`CCACHE_COMPRESS` 以及构建后统计与超限清理，在 GitHub 10GB 限额内尽量提高命中率。
+- **第三方包策略**：ImmortalWrt 自带包编译进固件；第三方包优先从 USTC 镜像下载预编译 ipk，首次启动通过 uci-defaults 批量安装，兼顾构建速度与运行时依赖管理。
+
+### 32 位运行时 tarball 维护
+
+`runtime/musl32.tar.gz` 和 `runtime/glibc32.tar.gz` 存放在仓库中，构建脚本自动提取并注入固件。
+
+升级 ImmortalWrt 版本时，建议在 CI 环境中重新生成 tarball，或从构建产物 Artifacts 下载 runtime-tarballs 替换本地文件，确保 32 位库与新版内核/musl 兼容。
+
+## 刷机与配置还原
+
+1. 在 Releases 下载对应版本的固件。
+2. 使用 `sysupgrade` 刷入（注意先备份重要数据）。
+3. 刷机后通过 SSH 上传之前的备份包（含网络配置、PPPoE 账号、已安装软件包等）：
 
 ```bash
-# 1. 上传备份到路由器
+# 上传备份
 scp -i id_ed25519_claude immortalwrt-backup-*-with-pkgs.tar.gz root@192.168.100.1:/tmp/
 
-# 2. 恢复备份（自动重新安装已记录的软件包）
+# 恢复备份（自动重装已记录的软件包）
 ssh -i id_ed25519_claude root@192.168.100.1 'sysupgrade -r /tmp/immortalwrt-backup-*-with-pkgs.tar.gz'
 ```
 
-> 备份包含了网络配置(PPPoE 账号密码)、已安装软件包(OpenClash/AdGuardHome 等)、mwan3/SmartDNS 配置等，刷机后恢复备份即可还原完整环境。
+备份中包含网络配置（PPPoE）、mwan3/SmartDNS 设置以及已安装软件列表（如 OpenClash/AdGuardHome 等），恢复后即可还原完整运行环境。
 
-### 构建参数
+## 构建参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| rootfs_size | 根文件系统大小 (MB) | 4096 |
-| include_docker | 是否包含 Docker | yes |
+| rootfs_size | 根文件系统大小（MB） | 4096 |
+| include_docker | 是否包含 Docker 相关包 | yes |
 
-## 32 位应用运行指南
-
-### 原理
-
-固件预置了两套 32 位运行时：
-
-| 运行时 | 路径 | 来源 |
-|--------|------|------|
-| musl 32-bit | `/lib/ld-musl-i386.so.1`, `/lib32/*.so` | ImmortalWrt i386 rootfs |
-| glibc 32-bit | `/lib/ld-linux.so.2`, `/lib32/glibc/*.so` | Ubuntu 22.04 i386 |
-
-musl 32 位库:
-
-| 文件 | 路径 | 说明 |
-|------|------|------|
-| `ld-musl-i386.so.1` | `/lib/` | musl 动态链接器（也是 libc） |
-| `libgcc_s.so.1` | `/lib32/` | GCC 运行时（异常处理/栈展开） |
-| `libstdc++.so.6` | `/lib32/` | C++ 标准库 |
-| `libatomic.so.1` | `/lib32/` | 原子操作支持 |
-| `libssl.so.3` | `/lib32/` | TLS/加密 |
-| `libcrypto.so.3` | `/lib32/` | 加密算法 |
-| `libcurl.so.4` | `/lib32/` | HTTP 客户端 |
-| `libz.so.1` | `/lib32/` | 压缩/解压 |
-
-glibc 32 位库 (在 `/lib32/glibc/`):
-
-| 文件 | 说明 |
-|------|------|
-| `ld-linux.so.2` | glibc 动态链接器（ELF 硬编码 /lib/ 路径） |
-| `libc.so.6`, `libpthread.so.0`, `libm.so.6` | glibc 核心运行时 |
-| `libgcc_s.so.1`, `libstdc++.so.6` | GCC/C++ 运行时 |
-| `libssl.so.3`, `libcrypto.so.3` | OpenSSL |
-| `libz.so.1` | zlib 压缩 |
-
-### 使用方式
-
-**纯静态链接的 32 位程序** — 直接运行，不需要任何额外操作：
-
-```bash
-./static-32bit-binary
-```
-
-**动态链接的 32 位程序** — 通过 `run-i386` 启动：
-
-```bash
-run-i386 /path/to/32bit-binary [args...]
-```
-
-`run-i386` 自动检测二进制类型：
-- musl 链接 → 使用 `/lib/ld-musl-i386.so.1` 从 `/lib32/` 加载库
-- glibc 链接 → 使用 `LD_LIBRARY_PATH=/lib32/glibc:/lib32` 回退
-
-直接执行 32 位动态链接程序会因加载到 64 位 .so 而失败。
-
-### 运行时 tarball 维护
-
-32 位运行时库已压缩为 tarball 提交在 `runtime/` 目录，构建脚本自动检测并使用。**升级 ImmortalWrt 版本时需要重新生成。**
-
-生成方式：在 GitHub Actions ubuntu-22.04 运行环境中执行：
-
-```bash
-# 1. 克隆你要升级的目标版本
-git clone https://github.com/immortalwrt/immortalwrt -b <新版本> /tmp/openwrt
-cd /tmp/openwrt
-
-# 2. 下载 i386 rootfs（用于 musl 32 位库）
-wget https://downloads.immortalwrt.org/releases/<新版本>/targets/x86/64/immortalwrt-<新版本>-x86-64-generic-rootfs.tar.gz
-mkdir -p i386-rootfs && cd i386-rootfs
-wget https://downloads.immortalwrt.org/releases/<新版本>/targets/x86/generic/immortalwrt-<新版本>-x86-generic-rootfs.tar.gz
-tar -xzf immortalwrt-*-x86-generic-rootfs.tar.gz
-# 提取 musl 32 位文件
-mkdir -p musl32
-cp -a lib/ld-musl-i386.so.1 musl32/
-cp -a usr/lib/libgcc_s*.so* musl32/
-# ...（完整提取逻辑参考 scripts/runtime-musl32.sh）
-
-# 3. 生成 glibc 32 位库（从 Ubuntu 22.04 i386 环境复制）
-# 参考 scripts/runtime-glibc32.sh
-
-# 4. 打包
-cd musl32 && tar -czf musl32.tar.gz *
-cd glibc32 && tar -czf glibc32.tar.gz *
-
-# 5. 替换仓库中的旧文件
-cp musl32.tar.gz runtime/
-cp glibc32.tar.gz runtime/
-```
-
-推荐做法：直接运行 CI 构建一次（不提交 tarball），从构建产物 Artifacts 下载 `runtime-tarballs`，解压后覆盖 `runtime/` 目录。构建时 `scripts/runtime-musl32.sh` 和 `scripts/runtime-glibc32.sh` 会自动从新版本 i386 rootfs 提取最新的 32 位库。
-
-**路径对照：**
-
-| 文件 | 仓库路径 | 固件路径 | 来源 |
-|------|---------|---------|------|
-| musl 32-bit tarball | `runtime/musl32.tar.gz` | → `/lib/ld-musl-i386.so.1`, `/lib32/*.so` | ImmortalWrt i386 rootfs |
-| glibc 32-bit tarball | `runtime/glibc32.tar.gz` | → `/lib/ld-linux.so.2`, `/lib32/glibc/*.so` | Ubuntu 22.04 i386 |
-
-## 优化说明
-
-- 禁用 BTF 调试信息（加速编译，减小内核体积）
-- 禁用 FTRACE/KPROBE/KEXEC/CRASH_DUMP
-- 精简网卡/音频驱动（移除 HDA 声卡、WiFi 等）
-- 仅启用必要的虚拟化网卡驱动 (vmxnet3, e1000e)
-- 启用 ccache + dl 缓存（分支级 key，防 10GB 堆积）
-- GitHub Actions 自动保留最近 3 个 Release
-- 使用 LLVM/Clang 构建（部分组件）
-
-## 文件结构
+## 文件结构（简化）
 
 ```
 ├── .github/workflows/build.yml    # GitHub Actions 构建工作流
 ├── .config                         # OpenWrt 配置 (x86_64)
-├── diy-part1.sh                    # 自定义软件源
-├── diy-part2.sh                    # 自定义配置编排器
-│
-├── scripts/                        # 构建模块（由 diy-part2.sh 加载）
-│   ├── kernel-config.sh            # IA32_EMULATION 内核补丁
-│   ├── runtime-musl32.sh           # musl 32 位运行时提取
-│   ├── runtime-glibc32.sh          # glibc 32 位运行时提取
-│   ├── config-manifest.sh          # 统一包配置清单（source/binary/exclude）
-│   └── build-runtime-tarballs.sh   # 运行时 tarball 生成
-│
-├── files/                          # 固件预置文件
-│   ├── etc/config/                 # 网络/mwan3/smartdns 默认配置
-│   ├── etc/dropbear/               # SSH 授权密钥
-│   ├── etc/uci-defaults/           # 首次启动脚本
-│   └── usr/bin/run-i386            # 32 位程序运行包装器
-│
-├── shell/
-│   ├── prepare-binary.sh           # 二进制 ipk 下载 + 注入
-│   └── prepare-store.sh            # iStore 二进制包处理
-│
-└── release.txt                     # Release 说明
+├── diy-part1.sh                    # 自定义软件源/feeds
+├── diy-part2.sh                    # 自定义配置编排器（加载 scripts/*）
+├── scripts/                        # 构建模块（内核补丁、运行时提取、包清单等）
+├── files/                          # 固件预置文件（配置、SSH 密钥、uci-defaults 脚本等）
+├── shell/                          # 二进制 ipk 下载与注入脚本
+└── runtime/                        # 32 位运行时 tarball（musl32 / glibc32）
 ```
 
 ## 致谢
