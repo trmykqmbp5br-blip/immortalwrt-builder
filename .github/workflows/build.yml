@@ -152,6 +152,18 @@ jobs:
           GITHUB_ENV=/dev/null timeout 28800 make -j1 V=s || exit $?
         fi
 
+    - name: ccache stats & maintenance
+      if: always()
+      run: |
+        echo "=== ccache stats ==="
+        ccache -s 2>/dev/null || true
+        # ccache 超过 6GB 时清理，避免 GitHub 10GB 限额驱逐
+        SIZE=$(ccache -s 2>/dev/null | grep -i 'cache size' | grep -oP '[\d.]+(?=\s*G)' || echo "0")
+        if [ -n "$SIZE" ] && [ "$(echo "$SIZE > 6" | bc 2>/dev/null)" = "1" ]; then
+          echo "ccache exceeds 6GB ($SIZE GB), clearing..."
+          ccache -C 2>/dev/null || true
+        fi
+
     - name: Save ccache
       if: always()
       continue-on-error: true
