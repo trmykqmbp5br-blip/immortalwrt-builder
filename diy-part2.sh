@@ -60,3 +60,6 @@ if [ -f "target/linux/x86/image/Makefile" ]; then
 fi
 
 echo "=== diy-part2.sh 完成 ==="
+
+# 再次 make defconfig，让 OpenWrt 自动处理 Kconfig 依赖
+make defconfig 2>/dev/null || true
