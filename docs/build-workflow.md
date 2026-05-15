@@ -191,8 +191,10 @@ config-manifest.sh
   └─ apply_manifest()  →  写入 .config（禁用所有 BINARY 包）
 
 diy-part1.sh
-  → ln -sf 链接 package/custom-provides/（PROVIDES 虚拟包）
-  → ./scripts/feeds update -a / install -a
+  → source config-manifest.sh（加载 BINARY 包列表）
+  → generate-provides.sh（动态生成 PROVIDES 虚拟包 Makefile）
+  → ln -sf package/custom-provides（链接到构建树）
+  → ./scripts/feeds update -a / install -a（索引包含 PROVIDES 信息）
 
 diy-part2.sh → generate-provides.sh（动态生成 PROVIDES Makefile）
   → kernel-config/runtime patches
