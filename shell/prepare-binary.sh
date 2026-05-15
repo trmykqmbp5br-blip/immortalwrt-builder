@@ -129,7 +129,7 @@ prepare_binary_packages() {
         local ok=false
 
         case "$method" in
-            feed)
+            feed|ustc)
                 local feed="$payload"
                 echo "  处理: $pkg (feed: $feed)"
                 download_feed_pkg "$feed" "$pkg" "${TMPDIR}/${pkg}.ipk" && ok=true
