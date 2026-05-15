@@ -43,9 +43,21 @@ key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh
 restore-keys: |
   dl-${{ env.REPO_BRANCH }}-
 
-# 保存（仅构建成功时）
-if: success()
-continue-on-error: true
+# 构建成功时保存（标准 hash key，下次直接命中）
+- name: Save dl cache on success
+  if: success()
+  uses: actions/cache/save@v5
+  with:
+    path: /workdir/openwrt/dl/
+    key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+
+# 构建失败时保存（-failed-{run_number} 后缀，不影响干净缓存）
+- name: Save dl cache on failure
+  if: failure()
+  uses: actions/cache/save@v5
+  with:
+    path: /workdir/openwrt/dl/
+    key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
 ```
 
 - **key 基于 feeds 配置哈希**（`hashFiles('feeds.conf.default', 'diy-part1.sh')`），feeds 不变则不产生新缓存条目
