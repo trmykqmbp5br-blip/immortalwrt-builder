@@ -93,8 +93,9 @@ download_feed_pkg() {
     pkg_file=$(curl -sL --retry 3 --retry-delay 3 --connect-timeout 15 "${feed_url}/Packages.gz" 2>/dev/null \
         | gzip -d 2>/dev/null \
         | awk -v pkg="$pkg" '
-            $1=="Package:" && $2==pkg { found=1 }
-            found && $1=="Filename:" { print $2; exit }
+            /^Package: / {name=$2}
+            /^Filename: / {file=$2}
+            /^$/ { if (name==pkg) { print file; exit }; name="" }
         ')
     [ -z "$pkg_file" ] && return 1
     curl -sL --retry 3 --retry-delay 3 --connect-timeout 15 "${feed_url}/${pkg_file}" -o "$output" 2>/dev/null

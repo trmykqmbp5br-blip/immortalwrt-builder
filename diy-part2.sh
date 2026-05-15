@@ -55,8 +55,6 @@ make defconfig
 . "$SCRIPTS_DIR/config-manifest.sh"
 apply_manifest "$CONFIG_MANIFEST_BINARY" "$CONFIG_MANIFEST_EXCLUDE" "$CONFIG_MANIFEST_SOURCE"
 
-# 启用 PROVIDES 虚拟包（编译空包但 PROVIDES 所有 BINARY 包）
-./scripts/config --enable "CONFIG_PACKAGE_custom-binary-provides" 2>/dev/null || true
 
 # ============= 6. Rootfs 大小调整 =============
 if [ -n "${ROOTFS_SIZE:-}" ] && [ "$ROOTFS_SIZE" != "4096" ]; then

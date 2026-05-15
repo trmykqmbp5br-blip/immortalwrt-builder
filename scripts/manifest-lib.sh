@@ -29,4 +29,7 @@ apply_manifest() {
     for pkg in $source_list; do
         ./scripts/config --enable "CONFIG_PACKAGE_${pkg}" 2>/dev/null || true
     done
+
+    # 启用 PROVIDES 虚拟包（编译空包，接管所有 BINARY 包的依赖请求）
+    ./scripts/config --enable "CONFIG_PACKAGE_custom-binary-provides" 2>/dev/null || true
 }

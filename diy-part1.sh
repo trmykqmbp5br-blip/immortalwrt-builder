@@ -10,3 +10,7 @@ echo "src-git small https://github.com/kenzok8/small.git;master" >> feeds.conf.d
 
 # sirpdboy: 高级设置、分区扩容、酷猫主题等
 # echo "src-git sirpdboy https://github.com/sirpdboy/sirpdboy-package.git;main" >> feeds.conf.default
+
+# ============= 链接 PROVIDES 虚拟包 =============
+# 空包，PROVIDES 所有 BINARY 包，编译期依赖系统认为这些包已存在
+ln -sf "${GITHUB_WORKSPACE}/package/custom-provides" "package/custom-provides" 2>/dev/null || true
