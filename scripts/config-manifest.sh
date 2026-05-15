@@ -10,7 +10,7 @@
 # 复用方式:
 #   新项目: source manifest-lib.sh，声明自己的 BINARY_SOURCE + 包清单，调用 apply_manifest
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 加载机制层
 . "$SCRIPT_DIR/manifest-lib.sh"
