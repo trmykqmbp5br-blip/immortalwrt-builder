@@ -180,18 +180,15 @@ jobs:
       run: |
         cd /workdir/openwrt/bin/targets/*/*
         rm -rf packages
+        FILES=""
+        for f in ./*squashfs-combined-efi.img.gz ./*.manifest ./*.bom.cdx.json ./*.kernel.bin ./sha256sums ./config.buildinfo ./feeds.buildinfo ./profiles.json; do
+          [ -f "$f" ] && FILES="$FILES $f"
+        done
         gh release create "immortalwrt-24.10.6-${{ github.run_number }}" \
           --repo ${{ github.repository }} \
           --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
           --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          ./*squashfs-combined-efi.img.gz \
-          ./*.manifest \
-          ./*.bom.cdx.json \
-          ./*.kernel.bin \
-          ./sha256sums \
-          ./config.buildinfo \
-          ./feeds.buildinfo \
-          ./profiles.json
+          $FILES
         echo "=== 清理旧 Release ==="
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +4 \
