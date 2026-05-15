@@ -98,6 +98,7 @@ continue-on-error: true
 | `package/custom-provides/Makefile` | PROVIDES 虚拟包，编译空包接管所有 BINARY 包的依赖请求 |
 | `scripts/binary-packages.sh` | BINARY 包扁平列表，被 diy-part1/diy-part2 共用 |
 | `scripts/verify-kernel-deps.sh` | 校验 BINARY 包的内核依赖 (.config 启用检查) |
+| `scripts/verify-pkg-consistency.sh` | 校验 BINARY 包前后端一致性 (core↔luci-app 配对 + ipk 依赖完整性) |
 
 ### 包分类
 
@@ -161,6 +162,7 @@ diy-part2.sh → kernel-config/runtime patches
       ├─ gh-bin: → download_gh_binary()
       └─ 生成 uci-defaults/99-install-ipk-cache.sh
   → verify-kernel-deps.sh（校验 ipk 中 kmod 依赖 + BINARY_KERNEL_DEPS 声明式依赖）
+  → verify-pkg-consistency.sh（校验 core↔luci-app 强制配对 + ipk 依赖完整性）
   → 二次 make download（补新添加包的源码）
 
 gh-bin 包的二进制兼容性检查：`check_gh_binary_deps()` 自动验证 ELF 架构（必需 x86-64）、链接方式（glibc 阻断）、列出 NEEDED 共享库，确保提取的二进制能在 ImmortalWrt musl 环境下运行。
