@@ -77,8 +77,14 @@ if [ "${#MISSING_DEPS[@]}" -gt 0 ]; then
         echo "  - $dep"
     done
     echo ""
-    echo "Add missing configs to kernel-config patches (scripts/kernel-config.sh)"
-    echo "or to BINARY_KERNEL_DEPS in scripts/config-manifest.sh for gh-bin packages."
+    echo "Suggested fix: add these to your kernel-config section in diy-part2.sh:"
+    for dep in "${MISSING_DEPS[@]}"; do
+        local config_name
+        config_name=$(echo "$dep" | awk '{print $1}')
+        echo "  ./scripts/config --enable ${config_name}"
+    done
+    echo ""
+    echo "NOTE: Do NOT run 'make defconfig' after adding these!"
     exit 1
 else
     echo "OK: All kernel dependencies for BINARY packages satisfied."

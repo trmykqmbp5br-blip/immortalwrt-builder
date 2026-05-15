@@ -39,14 +39,36 @@ github_release_dl() {
 }
 
 # 从 GitHub Releases 下载 ipk
+# 来源格式: gh:owner/repo 或 gh:owner/repo:tag
 download_gh_release() {
-    local repo="$1" pattern="$2" output="$3"
+    local pkg_name="$1"    # 包名，用作默认 pattern
+    local payload="$2"     # 来源 payload (owner/repo 或 owner/repo:tag)
+    local output="$3"
+
+    # 解析 owner/repo 和可选 tag
+    local repo="$payload"
+    local tag=""
+    if [[ "$payload" == *:* ]]; then
+        tag="${payload##*:}"
+        repo="${payload%:*}"
+    fi
+
+    # 构建 API URL
+    local api_url
+    if [ -n "$tag" ]; then
+        api_url="https://api.github.com/repos/${repo}/releases/tags/${tag}"
+        echo "    Tag: $tag"
+    else
+        api_url="https://api.github.com/repos/${repo}/releases/latest"
+    fi
+
     local resp
-    resp=$(github_api_get "https://api.github.com/repos/${repo}/releases/latest?per_page=100") || return 1
+    resp=$(github_api_get "$api_url") || return 1
+
     local dl_url
     dl_url=$(echo "$resp" \
         | grep "browser_download_url" \
-        | grep -E "$pattern" \
+        | grep -E "$pkg_name" \
         | head -1 \
         | sed 's/.*"browser_download_url": "\(.*\)"/\1/')
     [ -z "$dl_url" ] && return 1
@@ -191,11 +213,8 @@ prepare_binary_packages() {
                 fi
                 ;;
             gh)
-                local repo="${payload%%:*}"
-                local pattern="${payload#*:}"
-                [ "$repo" = "$pattern" ] && pattern="$pkg"
-                echo "  $pkg (GitHub: $repo)"
-                if download_gh_release "$repo" "$pattern" "${TMPDIR}/${pkg}.ipk"; then
+                echo "  $pkg (GitHub: $payload)"
+                if download_gh_release "$pkg" "$payload" "${TMPDIR}/${pkg}.ipk"; then
                     cp "${TMPDIR}/${pkg}.ipk" "$IPK_CACHE_DIR/"
                     echo "    + $pkg.ipk saved"
                     PKG_STATUS["$pkg"]="downloaded"

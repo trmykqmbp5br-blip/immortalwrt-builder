@@ -26,7 +26,7 @@ declare -A BINARY_SOURCE
 #   store:special — iStore 商店（由 prepare-store.sh 处理）
 
 # --- 代理/VPN ---
-BINARY_SOURCE[luci-app-openclash]="gh:vernesong/OpenClash"
+BINARY_SOURCE[luci-app-openclash]="gh:vernesong/OpenClash:master"
 
 # --- DNS ---
 BINARY_SOURCE[smartdns]="feed:packages"

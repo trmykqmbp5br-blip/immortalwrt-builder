@@ -1,13 +1,13 @@
 #!/bin/bash
-# scripts/verify-pkg-consistency.sh — 校验 BINARY 包前后端一致性（防呆机制）
+# scripts/verify-pkg-consistency.sh — 校验 BINARY 包前后端一致性与运行时依赖闭环
 #
 # 检查：
-#   1. 强制 LuCI 配对 (如 smartdns → 必须有 luci-app-smartdns)
-#   2. ipk 依赖项中属于 BINARY 清单的包是否都存在于缓存中
+#   1. 强制 LuCI 配对 (smartdns → luci-app-smartdns)
+#   2. ipk 依赖闭环（运行时依赖的包必须在缓存或系统默认中）
 #
 # 调用时机：prepare-binary.sh 之后、make download 之前
 
-# 如果未从 diy-part2.sh source 环境调用，则独立加载配置
+# 独立加载
 if [ -z "$CONFIG_MANIFEST_BINARY" ] && [ -f "scripts/config-manifest.sh" ]; then
     . scripts/config-manifest.sh 2>/dev/null || true
 fi
@@ -18,26 +18,26 @@ fi
 IPK_CACHE_DIR="files/etc/ipk-cache"
 ERRORS=()
 
-echo "==> Verifying BINARY package consistency (Frontend/Backend pairing)..."
+echo "==> Verifying BINARY package consistency and runtime dependencies..."
 
 # ==========================================
-# 1. 强制 LuCI 配对 (核心包 → luci-app-核心包)
+# 1. 强制 LuCI 配对 (防后端缺前端)
 # ==========================================
 for pkg in "${BINARY_LUCI_MANDATORY[@]}"; do
-    luci_pkg="luci-app-${pkg}"
     if echo " $CONFIG_MANIFEST_BINARY " | grep -q " $pkg "; then
+        luci_pkg="luci-app-${pkg}"
         if ! echo " $CONFIG_MANIFEST_BINARY " | grep -q " $luci_pkg "; then
-            ERRORS+=("Core '${pkg}' is in BINARY manifest, but LuCI interface '${luci_pkg}' is missing.")
+            ERRORS+=("Core '${pkg}' included, but mandatory LuCI '${luci_pkg}' missing.")
         fi
     fi
 done
 
 # ==========================================
-# 2. ipk 依赖项检查
+# 2. ipk 依赖闭环校验
 # ==========================================
 if [ -d "$IPK_CACHE_DIR" ] && [ "$(ls "$IPK_CACHE_DIR"/*.ipk 2>/dev/null | wc -l)" -gt 0 ]; then
     # 缓存中所有包名
-    local cached_names=""
+    cached_names=""
     for ipk in "$IPK_CACHE_DIR"/*.ipk; do
         [ -f "$ipk" ] || continue
         name=$(basename "$ipk" | sed 's/_.*//')
@@ -50,24 +50,27 @@ if [ -d "$IPK_CACHE_DIR" ] && [ "$(ls "$IPK_CACHE_DIR"/*.ipk 2>/dev/null | wc -l
 
         # 提取 control 文件
         control_data=$(ar p "$ipk_file" control.tar.gz 2>/dev/null | tar xzf - ./control -O 2>/dev/null)
-        if [ -z "$control_data" ]; then
+        [ -z "$control_data" ] && \
             control_data=$(ar p "$ipk_file" control.tar.xz 2>/dev/null | tar xJf - ./control -O 2>/dev/null)
-        fi
 
         if [ -n "$control_data" ]; then
             deps=$(echo "$control_data" \
                 | awk '/^Depends:/{gsub(/Depends: /,""); print}' \
                 | tr ',' '\n' \
-                | awk '{print $1}' \
-                | sed 's/^ *//')
+                | awk '{print $1}')
 
             for dep in $deps; do
-                # 仅检查 BINARY 清单中的包之间的依赖
-                # 忽略系统包 (libc, libopenssl, kmod-* 等)
-                if echo " $CONFIG_MANIFEST_BINARY " | grep -q " $dep "; then
-                    if ! echo "$cached_names" | grep -q " $dep "; then
-                        ERRORS+=("'${pkg_name}' depends on '${dep}', but '${dep}' is not in ipk cache.")
-                    fi
+                # 忽略系统底层依赖
+                [[ "$dep" == "libc" ]] && continue
+                [[ "$dep" == "kernel" ]] && continue
+                [[ "$dep" =~ ^kmod- ]] && continue
+
+                # 检查：是否在缓存中 或 在 BINARY 清单中（由系统默认提供）
+                in_cache=$(echo "$cached_names" | grep -wq "$dep" && echo 1 || echo 0)
+                in_manifest=$(echo " $CONFIG_MANIFEST_BINARY " | grep -q " $dep " && echo 1 || echo 0)
+
+                if [ "$in_cache" -eq 0 ] && [ "$in_manifest" -eq 0 ]; then
+                    ERRORS+=("'${pkg_name}' depends on '${dep}', not in ipk-cache or manifest. May crash at runtime!")
                 fi
             done
         fi
@@ -75,7 +78,7 @@ if [ -d "$IPK_CACHE_DIR" ] && [ "$(ls "$IPK_CACHE_DIR"/*.ipk 2>/dev/null | wc -l
 fi
 
 # ==========================================
-# 3. 结果
+# 结果
 # ==========================================
 if [ "${#ERRORS[@]}" -gt 0 ]; then
     echo ""
@@ -83,9 +86,7 @@ if [ "${#ERRORS[@]}" -gt 0 ]; then
     for err in "${ERRORS[@]}"; do
         echo "  - $err"
     done
-    echo ""
-    echo "Add the missing package to scripts/config-manifest.sh"
     exit 1
 else
-    echo "OK: All BINARY packages have consistent frontend/backend pairing."
+    echo "OK: All BINARY packages consistent and runtime-safe."
 fi
