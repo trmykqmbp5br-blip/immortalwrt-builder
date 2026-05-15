@@ -97,6 +97,7 @@ continue-on-error: true
 | `diy-part2.sh` | 编排器，按序执行上述脚本 |
 | `package/custom-provides/Makefile` | PROVIDES 虚拟包，编译空包接管所有 BINARY 包的依赖请求 |
 | `scripts/binary-packages.sh` | BINARY 包扁平列表，被 diy-part1/diy-part2 共用 |
+| `scripts/verify-kernel-deps.sh` | 校验 BINARY 包的内核依赖 (.config 启用检查) |
 
 ### 包分类
 
@@ -159,6 +160,7 @@ diy-part2.sh → kernel-config/runtime patches
       │   └─ GitHub API → 下载 luci-app-openclash_*.ipk → files/etc/ipk-cache/
       ├─ gh-bin: → download_gh_binary()
       └─ 生成 uci-defaults/99-install-ipk-cache.sh
+  → verify-kernel-deps.sh（校验 ipk 中 kmod 依赖 + BINARY_KERNEL_DEPS 声明式依赖）
   → 二次 make download（补新添加包的源码）
 
 gh-bin 包的二进制兼容性检查：`check_gh_binary_deps()` 自动验证 ELF 架构（必需 x86-64）、链接方式（glibc 阻断）、列出 NEEDED 共享库，确保提取的二进制能在 ImmortalWrt musl 环境下运行。
