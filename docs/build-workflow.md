@@ -24,7 +24,7 @@
 7. Install feeds          # ./scripts/feeds install -a
 8. Apply custom config    # diy-part2.sh（核心步骤，见下文）
 9. Download sources       # make download -j$(nproc)
-10. Save dl cache         # if: success() 构建成功才保存
+10. Save dl cache         # 成功保存纯净缓存，失败保存 -failed- 兜底缓存
 11. Compile firmware      # make -j$(nproc) V=s
 12. ccache stats           # ccache -s + 超 6GB 清理
 13. Verify binary inject  # 检查 binary-manifest.json 的 skipped 包
@@ -333,10 +333,8 @@ OpenWrt 的 `rules.mk` 中 `export CCACHE_DIR:=$(CONFIG_CCACHE_DIR)` 覆盖了 G
 BINARY 包被禁用（`.config` 中设为 not set）后，如果有其他编译的包 `depends on` 这个 BINARY 包，make 会报依赖断裂错误。`package/custom-provides/Makefile` 编译一个空包，通过 OpenWrt 的 PROVIDES 机制声明它提供所有 BINARY 包名。编译期依赖系统检查到该虚拟包已启用（`CONFIG_PACKAGE_custom-binary-provides=y`），就会认为 BINARY 包已存在，不再报错。实际运行时，BINARY 包通过开机 `opkg install --force-depends` 安装到系统中。
 ### gh-bin 二进制兼容性检查做什么？
 
-`download_gh_binary()` 解压 tar.gz 提取 ELF 后自动调用 `check_gh_binary_deps()`（详细策略见上方表格）：
-1. 确认是 ELF 文件
-2. 架构必须为 x86-64 或 i386（否则 `exit 1` 阻断构建）
-3. x86-64 静态/musl 动态 → 直接可用
-4. x86-64 glibc 动态链接 → `exit 1` 阻断（64 位环境无法运行 glibc）
-5. i386 静态/musl/glibc 动态 → 允许通过（依赖 32 位兼容层兜底）
-6. 打印 NEEDED 共享库清单，提醒确保在固件的 64 位或 32 位 lib 路径中存在
+`download_gh_binary()` 解压 tar.gz 提取 ELF 后自动调用 `check_gh_binary_deps()`：
+- 架构必须为 x86-64 或 i386（其他架构 `exit 1` 阻断构建）
+- x86-64 glibc 动态链接 → `exit 1` 阻断（64 位 musl 环境无法运行 glibc）
+- i386 glibc 动态链接 → 允许通过（依赖 32 位 glibc 兼容层兜底）
+- 打印 NEEDED 共享库清单，提醒确保在固件的 64 位或 32 位 lib 路径中存在
