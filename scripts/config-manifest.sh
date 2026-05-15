@@ -70,8 +70,8 @@ BINARY_SOURCE[luci-i18n-docker-zh-cn]="feed:luci"
 BINARY_SOURCE[luci-app-dockerman]="feed:luci"
 BINARY_SOURCE[luci-i18n-dockerman-zh-cn]="feed:luci"
 
-# --- 商店 ---
-BINARY_SOURCE[luci-app-store]="store:special"
+# --- 商店（暂无稳定 ipk 源，暂不包含） ---
+# BINARY_SOURCE[luci-app-store]="feed:packages"
 
 # ==================== BINARY 包清单（禁用编译，开机装 ipk） ====================
 CONFIG_MANIFEST_BINARY=""
@@ -112,7 +112,7 @@ else
 fi
 
 # --- 商店 ---
-CONFIG_MANIFEST_BINARY="$CONFIG_MANIFEST_BINARY luci-app-store"
+# luci-app-store 暂移除，等稳定 ipk 源
 
 # ==================== 源码编译包（只需显式启用 feed 中非默认的包） ====================
 CONFIG_MANIFEST_SOURCE=""
@@ -121,7 +121,8 @@ CONFIG_MANIFEST_SOURCE=""
 CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE luci-app-fchomo"
 
 # ==================== 应用清单 ====================
-apply_manifest "$CONFIG_MANIFEST_BINARY" "$CONFIG_MANIFEST_EXCLUDE" "$CONFIG_MANIFEST_SOURCE"
+# 注意：apply_manifest() 不在本文件中调用，由 diy-part2.sh 在 make defconfig 之后执行
+# 这是为了确保 scripts/config --disable 不会被后续的 make defconfig 复活 BINARY 包
 
 # 导出 BINARY_PACKAGES（供 prepare-binary.sh 消费）
 export BINARY_PACKAGES="$CONFIG_MANIFEST_BINARY"

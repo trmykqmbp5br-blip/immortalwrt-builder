@@ -5,9 +5,9 @@
 # ================================================================
 # apply_manifest — 根据三份列表统一写入 .config
 # 用法: apply_manifest "binary_pkgs" "exclude_pkgs" "source_pkgs"
-# binary — 禁用 .config，不编译；feed/GitHub 来源的 ipk 开机装
-# exclude — 禁用 .config，不编译不安装
-# source — 启用 .config，正常编译
+# 使用 OpenWrt 的 scripts/config 工具（精确 key 操作，无 sed 误伤）
+#
+# 调用时机：必须在 make defconfig 之后，且不再执行第二次 make defconfig
 # ================================================================
 apply_manifest() {
     local binary_list="$1"
@@ -15,26 +15,18 @@ apply_manifest() {
     local source_list="$3"
     local pkg
 
-    # 二进制 ipk 包：.config 禁用
+    # 二进制 ipk 包：禁用 .config
     for pkg in $binary_list; do
-        sed -i "/^CONFIG_PACKAGE_${pkg}=[ym]$/s/=.*/=n/" .config 2>/dev/null || true
-        sed -i "/^# CONFIG_PACKAGE_${pkg} is not set$/d" .config 2>/dev/null || true
-        echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
+        ./scripts/config --disable "CONFIG_PACKAGE_${pkg}" 2>/dev/null || true
     done
 
-    # 排除包：.config 禁用
+    # 排除包：禁用 .config
     for pkg in $exclude_list; do
-        sed -i "/^CONFIG_PACKAGE_${pkg}=[ym]$/s/=.*/=n/" .config 2>/dev/null || true
-        sed -i "/^# CONFIG_PACKAGE_${pkg} is not set$/d" .config 2>/dev/null || true
-        echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
+        ./scripts/config --disable "CONFIG_PACKAGE_${pkg}" 2>/dev/null || true
     done
 
-    # 源码编译包：.config 启用
+    # 源码编译包：启用 .config
     for pkg in $source_list; do
-        sed -i "/^CONFIG_PACKAGE_${pkg}=n$/s/=n/=y/" .config 2>/dev/null || true
-        if ! grep -q "^CONFIG_PACKAGE_${pkg}=y$" .config 2>/dev/null; then
-            sed -i "/^# CONFIG_PACKAGE_${pkg} is not set$/d" .config 2>/dev/null || true
-            echo "CONFIG_PACKAGE_${pkg}=y" >> .config
-        fi
+        ./scripts/config --enable "CONFIG_PACKAGE_${pkg}" 2>/dev/null || true
     done
 }
