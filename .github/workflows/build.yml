@@ -85,7 +85,9 @@ jobs:
       with:
         path: /workdir/openwrt/dl
         key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
-        restore-keys: dl-${{ env.REPO_BRANCH }}-
+        restore-keys: |
+          dl-${{ env.REPO_BRANCH }}-
+          dl-${{ env.REPO_BRANCH }}
 
     - name: Restore ccache
       id: restore-ccache
@@ -93,7 +95,9 @@ jobs:
       with:
         path: /home/runner/.ccache
         key: ccache-${{ env.REPO_BRANCH }}-${{ github.run_id }}
-        restore-keys: ccache-${{ env.REPO_BRANCH }}-
+        restore-keys: |
+          ccache-${{ env.REPO_BRANCH }}-
+          ccache-${{ env.REPO_BRANCH }}
 
     - name: Configure feeds
       run: |
