@@ -6,7 +6,7 @@
 #
 # 二进制注入由 shell/custom-packages.sh 根据 $INCLUDE_DOCKER 控制。
 
-DOCKER_PKGS="dockerd docker docker-compose luci-lib-docker luci-app-docker luci-app-dockerman"
+DOCKER_PKGS="dockerd docker docker-compose luci-lib-docker luci-app-docker luci-app-dockerman luci-i18n-docker-zh-cn luci-i18n-dockerman-zh-cn"
 
 for pkg in $DOCKER_PKGS; do
     sed -i "s/.*CONFIG_PACKAGE_${pkg}.*/# CONFIG_PACKAGE_${pkg} is not set/" .config 2>/dev/null || true
