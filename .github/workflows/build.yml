@@ -194,25 +194,24 @@ jobs:
           echo "All binary packages injected successfully."
         fi
 
-    - name: Organize & Release
-      if: env.UPLOAD_RELEASE == 'true' && success()
+    - name: Release firmware
+      if: success()
       env:
-        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        cd /workdir/openwrt/bin/targets/*/*
-        rm -rf packages
-        FILES=""
-        for f in ./*squashfs-combined-efi.img.gz ./*.manifest ./*.bom.cdx.json ./*.kernel.bin ./sha256sums ./config.buildinfo ./feeds.buildinfo ./profiles.json; do
-          [ -f "$f" ] && FILES="$FILES $f"
+        cd /workdir/openwrt/bin/targets/x86/64/
+        IMG_FILE=$(find . -name "*combined*img.gz" -type f | head -n 1)
+        BIN_FILE=$(find . -name "*sysupgrade.bin" -type f | head -n 1)
+        TAG="v24.10.6-$(date +%Y%m%d-%H%M)"
+        TITLE="ImmortalWrt 24.10.6 Build $(date +%Y-%m-%d)"
+        cat > release_notes.md << 'NOTEEOF'
+        **immortalwrt-24.10.6-x86-64-generic-squashfs-combined.img.gz** - 物理刷机
+        **immortalwrt-24.10.6-x86-64-generic-squashfs-sysupgrade.bin** - 在线升级
+        NOTEEOF
+        echo "Creating release ${TAG}..."
+        gh release create "${TAG}" ${IMG_FILE} ${BIN_FILE}           --title "${TITLE}" --notes-file release_notes.md
+        echo "Cleaning up old releases..."
+        gh release list --limit 50 | tail -n +4 | awk '{print $1}' | while read -r tag; do
+          gh release delete "${tag}" -y
+          git push origin --delete "${tag}" 2>/dev/null || true
         done
-        gh release create "immortalwrt-24.10.6-${{ github.run_number }}" \
-          --repo ${{ github.repository }} \
-          --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
-          --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          $FILES
-        echo "=== 清理旧 Release ==="
-        gh release list --limit 100 --json tagName --jq '.[].tagName' \
-          | tail -n +4 \
-          | while read tag; do
-              [ -n "$tag" ] && gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
-            done
