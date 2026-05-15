@@ -30,8 +30,8 @@ BINARY_SOURCE[luci-app-openclash]="gh:vernesong/OpenClash"
 
 # --- DNS ---
 BINARY_SOURCE[smartdns]="gh:pymumu/smartdns"
-BINARY_SOURCE[luci-app-smartdns]="feed:luci"
-BINARY_SOURCE[luci-i18n-smartdns-zh-cn]="feed:luci"
+BINARY_SOURCE[luci-app-smartdns]="ustc:luci"
+BINARY_SOURCE[luci-i18n-smartdns-zh-cn]="ustc:luci"
 
 # --- 实用工具 ---
 BINARY_SOURCE[luci-i18n-diskman-zh-cn]="feed:luci"
