@@ -160,7 +160,8 @@ jobs:
           --repo ${{ github.repository }} \
           --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
           --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          ./*squashfs-combined-efi.img.gz
+          ./*squashfs-combined-efi.img.gz \
+          ./*squashfs-sysupgrade.bin
         echo "=== 清理旧 Release ==="
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +4 \
