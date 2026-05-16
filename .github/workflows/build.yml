@@ -21,6 +21,7 @@ permissions:
   actions: write
 
 env:
+  INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: v24.10.6
   FEEDS_CONF: feeds.conf.default
@@ -92,9 +93,9 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
         restore-keys: |
-          dl-${{ env.REPO_BRANCH }}-
+          dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-
 
     # ============= 恢复 toolchain 缓存 =============
     - name: Restore toolchain cache
@@ -171,11 +172,11 @@ jobs:
 
     # ============= 2. 保存 dl 缓存 =============
     - name: Save dl cache
-      if: '!cancelled()'
+      if: steps.compile.outcome == 'success' && !cancelled()
       uses: actions/cache/save@v5
       with:
         path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
 
     - name: Compile the firmware
       id: compile
