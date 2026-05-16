@@ -93,7 +93,7 @@ jobs:
       run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
 
     - name: ccache cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: /home/runner/.ccache
         key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
