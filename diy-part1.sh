@@ -20,10 +20,7 @@ source "$GITHUB_WORKSPACE/scripts/config-manifest.sh"
 # 2. 动态生成 PROVIDES 虚拟包 Makefile
 bash "$GITHUB_WORKSPACE/scripts/generate-provides.sh"
 
-# 3. 链接到 openwrt 源码树
-ln -sf "$GITHUB_WORKSPACE/package/custom-provides" "$OPENWRT_ROOT/package/custom-provides"
-
-# 4. 建立索引（此时扫描到的就是包含最新 PROVIDES 的 Makefile）
+# 3. 建立索引（此时扫描到的就是包含最新 PROVIDES 的 Makefile）
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
