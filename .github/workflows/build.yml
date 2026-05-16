@@ -78,6 +78,14 @@ jobs:
         timeout 300 git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    - name: Calculate Toolchain Hash
+      run: |
+        cd /workdir/openwrt
+        # 获取 tools 和 toolchain 目录的最新 commit 短哈希
+        TOOLCHAIN_HASH=$(git log --pretty=tformat:"%h" -n1 tools toolchain 2>/dev/null || echo "unknown")
+        echo "TOOLCHAIN_HASH=$TOOLCHAIN_HASH" >>$GITHUB_ENV
+        echo "Toolchain hash: $TOOLCHAIN_HASH"
+
     # ============= 1. 恢复 dl 缓存 =============
     - name: Restore dl cache
       id: restore-dl
@@ -87,6 +95,29 @@ jobs:
         key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
         restore-keys: |
           dl-${{ env.REPO_BRANCH }}-
+
+    # ============= 恢复 toolchain 缓存 =============
+    - name: Restore toolchain cache
+      id: restore-toolchain
+      uses: actions/cache/restore@v5
+      with:
+        path: |
+          /workdir/openwrt/staging_dir/host*
+          /workdir/openwrt/staging_dir/tool*
+        # Key 由分支 + tools/toolchain 的 git hash 决定
+        key: toolchain-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}
+        # 注意：没有 restore-keys！必须精确匹配，不能用旧工具链！
+
+    - name: Compile tools and toolchain
+      run: |
+        cd /workdir/openwrt
+        if [ "${{ steps.restore-toolchain.outputs.cache-hit }}" == "true" ]; then
+          echo "🎯 Toolchain cache hit! Skipping compilation."
+        else
+          echo "⚙️ Toolchain cache miss. Compiling tools and toolchain..."
+          make tools/install -j$(nproc) || make tools/install -j1 V=s
+          make toolchain/install -j$(nproc) || make toolchain/install -j1 V=s
+        fi
 
     # ============= 1. 恢复 ccache =============
     - name: Restore ccache
@@ -154,6 +185,17 @@ jobs:
       with:
         path: ~/.ccache
         key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+
+    # ============= 保存 toolchain 缓存 =============
+    - name: Save toolchain cache
+      # 只有未命中缓存且运行未取消时才保存
+      if: steps.restore-toolchain.outputs.cache-hit != 'true' && !cancelled()
+      uses: actions/cache/save@v5
+      with:
+        path: |
+          /workdir/openwrt/staging_dir/host*
+          /workdir/openwrt/staging_dir/tool*
+        key: toolchain-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}
 
     - name: Organize & Release
       if: env.UPLOAD_RELEASE == 'true' && success()
