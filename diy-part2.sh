@@ -8,21 +8,21 @@ set -e
 
 echo "✅ 环境变量检查通过，工作区: $GITHUB_WORKSPACE"
 
-export CCACHE_DIR="/home/runner/.ccache"
-export CCACHE_MAXSIZE="5G"
-export CCACHE_COMPRESS="true"
-
 chmod +x scripts/*.sh shell/*.sh 2>/dev/null || true
+
+# 下载 Linux 官方的 scripts/config 脚本，重命名为 kconfig-tool
+curl -sL https://raw.githubusercontent.com/torvalds/linux/master/scripts/config -o scripts/kconfig-tool
+chmod +x scripts/kconfig-tool
 
 # diy-part2.sh — 自定义配置编排器
 # 由 GitHub Actions 在 openwrt/ 目录下调用（CWD = openwrt/）
 #
 # 执行顺序：
 #   1. 内核/运行时补丁 + 修复 Makefile
-#   2. make defconfig（计算所有 Kconfig 依赖）
-#   3. apply_manifest（./scripts/kconfig-tool --disable BINARY/EXCLUDE，--enable SOURCE + PROVIDES 虚拟包）
-#      绝不再执行 make defconfig，否则 BINARY 禁用会被依赖树复活
-#   4. 下载 ipk
+#   2. make defconfig（BINARY 包因 @BROKEN 自动 n）
+#   3. kconfig-tool 启用 CCACHE + SOURCE + PROVIDES
+#   4. 绝不再执行 make defconfig
+#   5. 下载 ipk
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$REPO_ROOT/scripts"
@@ -36,22 +36,14 @@ echo "=== diy-part2.sh 开始 ==="
 . "$SCRIPTS_DIR/runtime-musl32.sh"
 . "$SCRIPTS_DIR/runtime-glibc32.sh"
 
-# 下载 Linux 官方的 scripts/config 脚本，重命名为 kconfig-tool
-curl -sL https://raw.githubusercontent.com/torvalds/linux/master/scripts/config -o scripts/kconfig-tool
-chmod +x scripts/kconfig-tool
-
 # ============= 3. make defconfig =============
-# CCACHE_DIR 注入：确保 OpenWrt 的 rules.mk export 的路径与 cache action 一致
-./scripts/kconfig-tool --set-str CCACHE_DIR "/home/runner/.ccache"
+# 此时 BINARY 包已由 @BROKEN 标记，Kconfig 自动设为 n
 make defconfig
 
-# 【关键修复】defconfig 后强制启用 ccache 并指定目录，防止被 Kconfig 重置为空
-./scripts/kconfig-tool --enable CCACHE
-./scripts/kconfig-tool --set-str CCACHE_DIR "/home/runner/.ccache"
+# 启用 CCACHE + SOURCE 包 + PROVIDES 虚拟包
 ./scripts/kconfig-tool --enable CONFIG_CCACHE
-
-# ============= 5. apply_manifest =============
-# 使用 scripts/kconfig-tool --disable BINARY/EXCLUDE 包，--enable SOURCE 包
+./scripts/kconfig-tool --set-str CONFIG_CCACHE_DIR "/home/runner/.ccache"
+./scripts/kconfig-tool --enable CONFIG_PACKAGE_custom-binary-provides
 # 【关键】之后绝不再执行 make defconfig
 # ==========================================
 # P0 防御：严格检查配置加载与变量定义
@@ -117,11 +109,3 @@ if [ -f "$SCRIPTS_DIR/verify-pkg-consistency.sh" ]; then
 fi
 
 echo "=== diy-part2.sh 完成 ==="
-
-echo "==================== CCACHE DEBUG ===================="
-echo "Env CCACHE_DIR: $CCACHE_DIR"
-echo "Config CCACHE_DIR: $(grep CONFIG_CCACHE_DIR .config)"
-echo "Config CCACHE_ENABLE: $(grep CONFIG_CCACHE .config)"
-echo "ccache directory status:"
-ccache -s 2>&1 | head -n 5
-echo "====================================================="

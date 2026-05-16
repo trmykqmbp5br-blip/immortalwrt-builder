@@ -106,9 +106,6 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P1_SH
         bash -c './scripts/feeds update -a'
 
-    - name: Install feeds
-      run: bash -c 'cd openwrt && ./scripts/feeds install -a'
-
     - name: Apply custom config
       env:
         INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
@@ -176,9 +173,9 @@ jobs:
         echo "2 thread compile"
         # 将 GITHUB_ENV 指向 /dev/null，吸收编译过程中子脚本的所有环境变量写入
         export GITHUB_ENV=/dev/null
-        if ! CCACHE_DIR=/home/runner/.ccache make -j2 V=1; then
+        if ! make -j2 V=1 CONFIG_CCACHE=y CONFIG_CCACHE_DIR="/home/runner/.ccache"; then
           echo "Parallel build failed, retrying with single thread..."
-          CCACHE_DIR=/home/runner/.ccache make -j1 V=1 || exit $?
+          make -j1 V=1 CONFIG_CCACHE=y CONFIG_CCACHE_DIR="/home/runner/.ccache" || exit $?
         fi
 
     - name: ccache stats & maintenance
