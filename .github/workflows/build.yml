@@ -129,7 +129,7 @@ jobs:
         chown -R runner:runner /home/runner/.ccache || true
         su - runner -c "ccache -z && ccache -M 5G"
         # 编译命令强锁 CCACHE
-        make -j2 V=1 CONFIG_CCACHE=y CONFIG_CCACHE_DIR="/home/runner/.ccache"
+        make -j2 V=1 CONFIG_USE_CCACHE=y CONFIG_CCACHE_DIR="/home/runner/.ccache"
 
     - name: ccache stats
       if: always()

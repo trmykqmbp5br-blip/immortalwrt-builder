@@ -35,7 +35,7 @@ else
 fi
 
 # 6. 启用 CCACHE 强锁
-./scripts/kconfig-tool --enable CONFIG_CCACHE
+./scripts/kconfig-tool --enable CONFIG_USE_CCACHE
 ./scripts/kconfig-tool --set-str CONFIG_CCACHE_DIR "/home/runner/.ccache"
 
 # 7.（可选）强制启用需要源码编译的包
