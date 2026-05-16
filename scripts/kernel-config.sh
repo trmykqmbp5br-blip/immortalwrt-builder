@@ -76,5 +76,60 @@ for KERNEL_CONFIG in target/linux/x86/config-6.6 target/linux/x86/64/config-6.6;
     done
 done
 
+# Docker 内核选项（仅 INCLUDE_DOCKER=yes 时启用）
+if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
+    echo "==> 追加 Docker 内核选项..."
+    DOCKER_OPTS="
+CONFIG_CGROUPS=y
+CONFIG_CGROUP_CPUACCT=y
+CONFIG_CGROUP_DEVICE=y
+CONFIG_CGROUP_FREEZER=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_CPUSETS=y
+CONFIG_MEMCG=y
+CONFIG_NAMESPACES=y
+CONFIG_UTS_NS=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_NET_NS=y
+CONFIG_USER_NS=y
+CONFIG_VETH=y
+CONFIG_BRIDGE=y
+CONFIG_BRIDGE_NETFILTER=y
+CONFIG_NETFILTER=y
+CONFIG_NETFILTER_ADVANCED=y
+CONFIG_NF_CONNTRACK=y
+CONFIG_NF_CONNTRACK_NETLINK=y
+CONFIG_NF_NAT=y
+CONFIG_NF_NAT_IPV4=y
+CONFIG_NF_NAT_IPV6=y
+CONFIG_IP_NF_IPTABLES=y
+CONFIG_IP_NF_FILTER=y
+CONFIG_IP_NF_NAT=y
+CONFIG_IP_NF_TARGET_MASQUERADE=y
+CONFIG_IP_NF_MATCH_CONNTRACK=y
+CONFIG_IP6_NF_IPTABLES=y
+CONFIG_IP6_NF_NAT=y
+CONFIG_IP6_NF_MATCH_CONNTRACK=y
+CONFIG_IP_NF_MATCH_PHYSDEV=y
+CONFIG_IP_VS=y
+CONFIG_IP_VS_RR=y
+CONFIG_IP_VS_WRR=y
+CONFIG_IP_VS_SH=y
+CONFIG_OVERLAY_FS=y
+"
+    for KERNEL_CONFIG in target/linux/x86/config-6.6 target/linux/x86/64/config-6.6; do
+        [ -f "$KERNEL_CONFIG" ] || continue
+        while IFS= read -r opt; do
+            [ -z "$opt" ] && continue
+            key="${opt%%=*}"
+            # 先删已有行，再追加
+            sed -i "/^${key}=/d; /^# ${key} /d" "$KERNEL_CONFIG" 2>/dev/null || true
+            echo "$opt" >> "$KERNEL_CONFIG"
+        done <<< "$DOCKER_OPTS"
+        echo "  Docker kernel options written to $KERNEL_CONFIG"
+    done
+fi
+
 # Inject olddefconfig to auto-fill NEW kernel options
 patch_kernel_defaults_olddefconfig "include/kernel-defaults.mk"

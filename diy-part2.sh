@@ -30,6 +30,35 @@ done
 # ============= 4. Docker 开关 =============
 . "$SCRIPTS_DIR/docker-toggle.sh"
 
+# Docker kmod 包（仅在 INCLUDE_DOCKER=yes 时启用）
+if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
+    echo "Enabling Docker kmod packages..."
+    for kmod in \
+        kmod-veth \
+        kmod-bridge \
+        kmod-nf-conntrack \
+        kmod-nf-conntrack-netlink \
+        kmod-nf-nat \
+        kmod-nf-nat4 \
+        kmod-nf-nat6 \
+        kmod-ipt-core \
+        kmod-ipt-nat \
+        kmod-ipt-conntrack \
+        kmod-ipt-physdev \
+        kmod-ip6tables \
+        kmod-ip6t-nat \
+        kmod-ip-vs \
+        kmod-overlay; do
+        pkg_conf=$(echo "$kmod" | sed 's/-/_/g')
+        if grep -q "CONFIG_PACKAGE_${pkg_conf}[= ]" .config 2>/dev/null; then
+            sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}=y/" .config
+        else
+            echo "CONFIG_PACKAGE_${pkg_conf}=y" >> .config
+        fi
+    done
+    echo "  Docker kmod packages enabled"
+fi
+
 # ============= 5. Rootfs 大小调整 =============
 if [ -n "${ROOTFS_SIZE:-}" ] && [ "$ROOTFS_SIZE" != "4096" ]; then
     echo "Setting rootfs size to ${ROOTFS_SIZE} MB..."
@@ -74,6 +103,7 @@ if [ -n "$CUSTOM_PACKAGES" ]; then
 fi
 
 # ============= 7. CCACHE 配置 =============
+KCONFIG_TOOL="./scripts/kconfig-tool"
 # --- CCACHE ---
 # 不再使用 CCACHE_DIR，直接写死和 Actions 一致的路径
 CCACHE_DIR_PATH="/home/runner/.ccache"
