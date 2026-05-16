@@ -78,12 +78,17 @@ jobs:
         timeout 300 git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    # ============= 1. 恢复 dl 缓存 =============
     - name: Restore dl cache
       id: restore-dl
       uses: actions/cache/restore@v5
       with:
         path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}
+        # 关键：把 feeds 配置和 part1 脚本的哈希值作为 Key 的一部分
+        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'scripts/diy-part1.sh') }}
+        # 关键：如果哈希没命中（比如你刚改了 feeds），去找回该分支上一次留下的旧缓存
+        restore-keys: |
+          dl-${{ env.REPO_BRANCH }}-
 
     - name: Restore ccache
       uses: actions/cache/restore@v5
@@ -119,12 +124,14 @@ jobs:
         echo "=== 下载后 ==="
         df -hT .
 
-    - name: Save dl cache (miss only)
+    # ============= 2. 保存 dl 缓存 =============
+    - name: Save dl cache
+      # 只有哈希未命中（产生了新缓存 Key）时才保存
+      if: steps.restore-dl.outputs.cache-hit != 'true' && !cancelled()
       uses: actions/cache/save@v5
-      if: steps.restore-dl.outputs.cache-hit != 'true'
       with:
         path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'scripts/diy-part1.sh') }}
 
     - name: Compile the firmware
       id: compile
