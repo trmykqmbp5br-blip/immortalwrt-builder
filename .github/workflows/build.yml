@@ -93,6 +93,16 @@ jobs:
           dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
           dl-${{ env.REPO_BRANCH }}-
 
+    # ====== ccache 缓存（需在 diy-part2.sh 之前恢复，因为其内含 make）======
+    - name: Restore ccache
+      uses: actions/cache/restore@v5
+      with:
+        path: /home/runner/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
+        restore-keys: |
+          ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
+          ccache-${{ env.REPO_BRANCH }}-
+
     - name: Configure feeds
       run: bash diy-part1.sh
 
@@ -112,16 +122,6 @@ jobs:
       with:
         path: /workdir/openwrt/dl/
         key: dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-${{ hashFiles('diy-part1.sh', 'scripts/kernel-config.sh') }}-run_${{ github.run_id }}-
-
-    # ====== ccache 缓存 ======
-    - name: Restore ccache
-      uses: actions/cache/restore@v5
-      with:
-        path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
-        restore-keys: |
-          ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
-          ccache-${{ env.REPO_BRANCH }}-
 
     - name: Compile firmware
       working-directory: /workdir/openwrt
