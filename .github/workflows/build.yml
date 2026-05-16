@@ -203,6 +203,7 @@ jobs:
       if: success()
       env:
         GH_REPO: ${{ github.repository }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         cd /workdir/openwrt/bin/targets/x86/64/
         IMG_FILE=$(find . -name "*combined*img.gz" -type f | head -n 1)
