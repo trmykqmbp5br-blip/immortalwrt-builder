@@ -141,9 +141,9 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}-${{ github.run_id }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-${{ github.run_id }}
         restore-keys: |
-          ccache-${{ env.REPO_BRANCH }}-
+          ccache-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-
 
     - name: Configure
       env:
@@ -196,11 +196,11 @@ jobs:
     # ============= 2. 保存 ccache =============
     - name: Save ccache
       continue-on-error: true
-      if: steps.restore-ccache.outputs.cache-hit != 'true' && !cancelled()
+      if: steps.compile.outcome == 'success' && steps.restore-toolchain.outputs.cache-hit != 'true'
       uses: actions/cache/save@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}-${{ github.run_id }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-${{ github.run_id }}
 
     # ============= 保存 toolchain 缓存 =============
     - name: Save toolchain cache
