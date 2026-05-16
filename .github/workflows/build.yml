@@ -134,7 +134,7 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}-${{ github.run_id }}
         restore-keys: |
           ccache-${{ env.REPO_BRANCH }}-
 
@@ -193,7 +193,7 @@ jobs:
       uses: actions/cache/save@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}-${{ github.run_id }}
 
     # ============= 保存 toolchain 缓存 =============
     - name: Save toolchain cache
