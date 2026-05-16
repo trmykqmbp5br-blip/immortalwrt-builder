@@ -23,12 +23,6 @@ permissions:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: v24.10.6
-  FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: .config
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
 
 jobs:
@@ -79,138 +73,79 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-    # 获取日期（与 ccache 一致）
-    - name: Get date for dl cache key
-      id: dl-date
+    - name: Get date for cache key
+      id: cache-date
       run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
 
-    # 恢复缓存
+    # ====== dl 缓存 ======
     - name: Restore dl cache
       uses: actions/cache/restore@v5
       with:
         path: /workdir/openwrt/dl/
-        key: dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-${{ hashFiles('diy-part1.sh', 'diy-part2.sh', 'scripts/kernel-config.sh') }}
         restore-keys: |
-          dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-
+          dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
           dl-${{ env.REPO_BRANCH }}-
 
-    - name: Get date for ccache key
-      id: ccache-date
-      run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
-
     - name: Configure feeds
-      run: |
-        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-        chmod +x $DIY_P1_SH
-        cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P1_SH
-        bash -c './scripts/feeds update -a'
+      run: bash diy-part1.sh
 
     - name: Apply custom config
-      env:
-        INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
-        ROOTFS_SIZE: ${{ github.event.inputs.rootfs_size }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        chmod +x diy-part2.sh  # 确保脚本可执行
-        [ -e files ] && mv files openwrt/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        cd openwrt
-        make defconfig
-        chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
-        $GITHUB_WORKSPACE/$DIY_P2_SH
-
-    - name: ccache cache
-      uses: actions/cache@v5
-      with:
-        path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
-        restore-keys: |
-          ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-
-          ccache-${{ env.REPO_BRANCH }}-
+      run: bash diy-part2.sh
 
     - name: Download sources
       working-directory: /workdir/openwrt
-      run: |
-        echo "=== 下载前 ==="
-        df -hT .
-        make download -j$(nproc) V=s
-        echo "=== 下载后 ==="
-        df -hT .
+      run: make download -j$(nproc)
 
-    # 构建成功时保存（key 含日期，每天可写入一条新缓存）
     - name: Save dl cache on success
       if: success()
-      continue-on-error: true
       uses: actions/cache/save@v5
       with:
         path: /workdir/openwrt/dl/
-        key: dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-${{ hashFiles('diy-part1.sh', 'diy-part2.sh', 'scripts/kernel-config.sh') }}-run_${{ github.run_id }}
 
-    # 构建失败时保存（带 -failed- 后缀，不冲突）
-    - name: Save dl cache on failure
-      if: failure()
-      continue-on-error: true
-      uses: actions/cache/save@v5
+    # ====== ccache 缓存 ======
+    - name: Restore ccache
+      uses: actions/cache/restore@v5
       with:
-        path: /workdir/openwrt/dl/
-        key: dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
+        path: /home/runner/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
+        restore-keys: |
+          ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
+          ccache-${{ env.REPO_BRANCH }}-
 
     - name: Compile firmware
-      id: compile
       working-directory: /workdir/openwrt
-      env:
-        CCACHE_DIR: /home/runner/.ccache
       run: |
-        mkdir -p "$CCACHE_DIR"
-        # 确保 runner 用户有写权限
-        sudo chown -R runner:runner /home/runner/.ccache 2>/dev/null || true
-        chmod -R 777 /home/runner/.ccache 2>/dev/null || true
-        # 重置计数器，编译结束后的 ccache -s 才能真实反映本次构建命中情况
-        ccache -z
-        ccache -M 5G
-        ccache -s
-        echo "2 thread compile"
-        # 将 GITHUB_ENV 指向 /dev/null，吸收编译过程中子脚本的所有环境变量写入
-        export GITHUB_ENV=/dev/null
-        if ! make -j2 V=1 CONFIG_CCACHE=y CONFIG_CCACHE_DIR="/home/runner/.ccache"; then
-          echo "Parallel build failed, retrying with single thread..."
-          make -j1 V=1 CONFIG_CCACHE=y CONFIG_CCACHE_DIR="/home/runner/.ccache" || exit $?
-        fi
+        chown -R runner:runner /home/runner/.ccache || true
+        su - runner -c "ccache -z && ccache -M 5G"
+        # 编译命令强锁 CCACHE
+        make -j2 V=1 CONFIG_CCACHE=y CONFIG_CCACHE_DIR="/home/runner/.ccache"
 
-    - name: ccache stats & maintenance
+    - name: ccache stats
       if: always()
       run: |
         echo "=== ccache stats ==="
-        ccache -s 2>/dev/null || true
+        su - runner -c "ccache -s" 2>/dev/null || true
         SIZE=$(ccache -s 2>/dev/null | grep -i 'cache size' | grep -oP '[\d.]+(?=\s*G)' || echo "0")
         if [ -n "$SIZE" ] && [ "$(echo "$SIZE > 6" | bc 2>/dev/null)" = "1" ]; then
           echo "ccache exceeds 6GB ($SIZE GB), clearing..."
           ccache -C 2>/dev/null || true
         fi
 
-    - name: Save ccache on failure
-      if: failure()
-      continue-on-error: true
+    - name: Save ccache on success
+      if: success()
       uses: actions/cache/save@v5
       with:
         path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-run_${{ github.run_id }}
 
-    - name: Verify binary injection
-      run: |
-        MANIFEST="$GITHUB_WORKSPACE/binary-manifest.json"
-        if [ ! -f "$MANIFEST" ]; then
-          echo "No binary-manifest.json found, skipping verification"
-          exit 0
-        fi
-        SKIPPED=$(jq -r '.summary.total_skipped // 0' "$MANIFEST")
-        if [ "$SKIPPED" -gt 0 ]; then
-          echo "⚠ $SKIPPED package(s) were skipped during binary injection:" >> $GITHUB_STEP_SUMMARY
-          jq -r '.packages | to_entries[] | select(.value.status == "skipped" or .value.status == "no_source" or .value.status == "bad_source") | "  - \(.key): \(.value.source)"' "$MANIFEST" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "All binary packages injected successfully."
-        fi
+    - name: Save ccache on failure
+      if: failure()
+      uses: actions/cache/save@v5
+      with:
+        path: /home/runner/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-failed-run_${{ github.run_id }}
 
     - name: Release firmware
       if: success()

@@ -1,111 +1,32 @@
 #!/bin/bash
 set -e
 
-# ==========================================
-# P0 防御：检查关键环境变量
-# ==========================================
-: "${GITHUB_WORKSPACE:?❌ 错误：环境变量 GITHUB_WORKSPACE 未定义！请确保在 GitHub Actions 环境中运行，或手动 export 该变量。}"
+cd /workdir/openwrt
 
-echo "✅ 环境变量检查通过，工作区: $GITHUB_WORKSPACE"
+# 1. 下载 kconfig-tool
+wget -O scripts/kconfig-tool https://raw.githubusercontent.com/torvalds/linux/master/scripts/config
+chmod +x scripts/kconfig-tool scripts/*.sh
 
-chmod +x scripts/*.sh shell/*.sh 2>/dev/null || true
+# 2. 注入 32 位运行时库到 files/ (保留)
+bash scripts/runtime-musl32.sh
+bash scripts/runtime-glibc32.sh
 
-# 下载 Linux 官方的 scripts/config 脚本，重命名为 kconfig-tool
-curl -sL https://raw.githubusercontent.com/torvalds/linux/master/scripts/config -o scripts/kconfig-tool
-chmod +x scripts/kconfig-tool
+# 3. 注入内核补丁与 Docker 内核依赖
+bash scripts/kernel-config.sh
 
-# diy-part2.sh — 自定义配置编排器
-# 由 GitHub Actions 在 openwrt/ 目录下调用（CWD = openwrt/）
-#
-# 执行顺序：
-#   1. 内核/运行时补丁 + 修复 Makefile
-#   2. make defconfig（BINARY 包因 @BROKEN 自动 n）
-#   3. kconfig-tool 启用 CCACHE + SOURCE + PROVIDES
-#   4. 绝不再执行 make defconfig
-#   5. 下载 ipk
-
-REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-SCRIPTS_DIR="$REPO_ROOT/scripts"
-
-echo "=== diy-part2.sh 开始 ==="
-
-# ============= 1. 内核配置补丁 =============
-. "$SCRIPTS_DIR/kernel-config.sh"
-
-# ============= 2. 32 位运行时 =============
-. "$SCRIPTS_DIR/runtime-musl32.sh"
-. "$SCRIPTS_DIR/runtime-glibc32.sh"
-
-# ============= 3. make defconfig =============
-# 此时 BINARY 包已由 @BROKEN 标记，Kconfig 自动设为 n
+# 4. 生成标准 .config (不再有 @BROKEN 欺骗)
 make defconfig
 
-# 启用 CCACHE + SOURCE 包 + PROVIDES 虚拟包
+# 5. 启用 CCACHE 强锁
 ./scripts/kconfig-tool --enable CONFIG_CCACHE
 ./scripts/kconfig-tool --set-str CONFIG_CCACHE_DIR "/home/runner/.ccache"
-./scripts/kconfig-tool --enable CONFIG_PACKAGE_custom-binary-provides
-# 【关键】之后绝不再执行 make defconfig
-# ==========================================
-# P0 防御：严格检查配置加载与变量定义
-# ==========================================
 
-# 1. 强制检查 source 是否成功，失败则立刻中断
-CONFIG_MANIFEST_PATH="$GITHUB_WORKSPACE/scripts/config-manifest.sh"
-if ! source "$CONFIG_MANIFEST_PATH"; then
-    echo "❌ 错误：无法加载 $CONFIG_MANIFEST_PATH！请检查文件是否存在及语法是否正确。"
-    exit 1
-fi
+# 6. (可选) 强制启用需要源码编译的包
+# 例如：如果需要编译 docker-ce 源码包，在此强制启用
+# ./scripts/kconfig-tool --enable CONFIG_PACKAGE_docker
+# ./scripts/kconfig-tool --enable CONFIG_PACKAGE_dockerd
 
-# 2. 为关键变量设置安全默认值（防止 source 成功但变量未定义的极端情况）
-CONFIG_MANIFEST_BINARY="${CONFIG_MANIFEST_BINARY:-}"
-CONFIG_MANIFEST_EXCLUDE="${CONFIG_MANIFEST_EXCLUDE:-}"
-CONFIG_MANIFEST_SOURCE="${CONFIG_MANIFEST_SOURCE:-}"
+# 7. 安全地解决新引入的内核依赖 (此时执行是安全的，不会再复活被禁用的包)
+make olddefconfig
 
-# 3. 状态日志（非常重要，方便排查是否加载成了空值）
-echo "✔️ Manifest 配置加载完成："
-echo "  - BINARY 包数量: $(echo $CONFIG_MANIFEST_BINARY | wc -w)"
-echo "  - EXCLUDE 包数量: $(echo $CONFIG_MANIFEST_EXCLUDE | wc -w)"
-echo "  - SOURCE 包数量: $(echo $CONFIG_MANIFEST_SOURCE | wc -w)"
-
-# 应用 manifest（此时即使变量为空，也是安全的空字符串，不会引发未定义行为）
-apply_manifest "$CONFIG_MANIFEST_BINARY" "$CONFIG_MANIFEST_EXCLUDE" "$CONFIG_MANIFEST_SOURCE"
-
-
-# ============= 6. Rootfs 大小调整 =============
-if [ -n "${ROOTFS_SIZE:-}" ] && [ "$ROOTFS_SIZE" != "4096" ]; then
-    echo "Setting rootfs size to ${ROOTFS_SIZE} MB..."
-    sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=[0-9]*/CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}/" .config
-fi
-
-# ============= 7. 二进制 ipk 下载 =============
-if [ -f "$REPO_ROOT/shell/prepare-binary.sh" ]; then
-    . "$REPO_ROOT/shell/prepare-binary.sh"
-    prepare_binary_packages "$REPO_ROOT/files" "$BINARY_PACKAGES"
-fi
-
-# ============= 8. IPK 依赖拓扑排序 =============
-if [ -f "$SCRIPTS_DIR/sort-ipk-deps.py" ]; then
-    echo "=== IPK 依赖拓扑排序 ==="
-    python3 "$SCRIPTS_DIR/sort-ipk-deps.py" "$REPO_ROOT/files/etc/ipk-cache"
-fi
-
-# ============= 9. x86 镜像 boot 目录修复 =============
-if [ -f "target/linux/x86/image/Makefile" ]; then
-    echo "=== 修复 x86 镜像 boot 目录源路径 ==="
-    python3 "$REPO_ROOT/shell/fix-x86-boot.py" "target/linux/x86/image/Makefile" || \
-        echo "  WARNING: x86 boot fix failed"
-fi
-
-# ============= 11. 校验 BINARY 包内核依赖 =============
-if [ -f "$SCRIPTS_DIR/verify-kernel-deps.sh" ]; then
-    echo "=== 校验 BINARY 包内核依赖 ==="
-    bash "$SCRIPTS_DIR/verify-kernel-deps.sh" || exit 1
-fi
-
-# ============= 11. 校验 BINARY 包前后端一致性 =============
-if [ -f "$SCRIPTS_DIR/verify-pkg-consistency.sh" ]; then
-    echo "=== 校验 BINARY 包前后端一致性 ==="
-    bash "$SCRIPTS_DIR/verify-pkg-consistency.sh" || exit 1
-fi
-
-echo "=== diy-part2.sh 完成 ==="
+echo "✅ diy-part2: Native config applied with 32-bit & Docker kernel support."
