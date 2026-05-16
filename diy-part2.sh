@@ -73,4 +73,11 @@ if [ -n "$CUSTOM_PACKAGES" ]; then
     echo "=== 第三方包处理完毕 ==="
 fi
 
+# ============= 7. CCACHE 配置 =============
+# --- CCACHE ---
+# 不再使用 CCACHE_DIR，直接写死和 Actions 一致的路径
+CCACHE_DIR_PATH="/home/runner/.ccache"
+$KCONFIG_TOOL --enable CONFIG_CCACHE
+$KCONFIG_TOOL --set-str CONFIG_CCACHE_DIR "$CCACHE_DIR_PATH"
+
 echo "=== diy-part2.sh 完成 ==="
