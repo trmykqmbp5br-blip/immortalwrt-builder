@@ -7,15 +7,15 @@ cd /workdir/openwrt
 wget -O scripts/kconfig-tool https://raw.githubusercontent.com/torvalds/linux/master/scripts/config
 chmod +x scripts/kconfig-tool scripts/*.sh
 
-# 2. 注入 32 位运行时库到 files/ (保留)
+# 2. 注入 32 位运行时库到 files/
 bash scripts/runtime-musl32.sh
 bash scripts/runtime-glibc32.sh
 
-# 3. 注入内核补丁与 Docker 内核依赖
-bash scripts/kernel-config.sh
-
-# 4. 生成标准 .config (不再有 @BROKEN 欺骗)
+# 3. 🚨 先生成标准 .config（必须有这一步，否则 .config 不存在）
 make defconfig
+
+# 4. 注入内核补丁与 Docker 内核依赖（此时操作已存在的 .config 才有效）
+bash scripts/kernel-config.sh
 
 # 5. 启用 CCACHE 强锁
 ./scripts/kconfig-tool --enable CONFIG_CCACHE
