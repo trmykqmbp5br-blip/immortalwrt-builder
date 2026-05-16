@@ -108,6 +108,15 @@ jobs:
         key: toolchain-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}
         # 注意：没有 restore-keys！必须精确匹配，不能用旧工具链！
 
+    - name: Skip tools & toolchain compilation if cache hit
+      if: steps.restore-toolchain.outputs.cache-hit == 'true'
+      run: |
+        cd /workdir/openwrt
+        # 和 cachewrtbuild 一样的 sed 命令，从顶层 Makefile 中去掉 stamp-compile 依赖
+        sed -i 's/ $(toolchain\/stamp-compile)//;' Makefile
+        sed -i 's/ $(tools\/stamp-compile)//;' Makefile
+        echo "Toolchain building skipped due to cache hit"
+
     - name: Compile tools and toolchain
       run: |
         cd /workdir/openwrt
