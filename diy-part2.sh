@@ -17,6 +17,9 @@ make defconfig
 # 4. 注入内核补丁与 Docker 内核依赖（此时操作已存在的 .config 才有效）
 bash scripts/kernel-config.sh
 
+# 4.5 注入内核编译期 olddefconfig 补丁（从 kernel-config.sh 移出）
+python3 scripts/kernel-config-patch.py
+
 # 5. 启用 CCACHE 强锁
 ./scripts/kconfig-tool --enable CONFIG_CCACHE
 ./scripts/kconfig-tool --set-str CONFIG_CCACHE_DIR "/home/runner/.ccache"

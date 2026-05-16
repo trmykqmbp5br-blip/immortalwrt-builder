@@ -22,5 +22,4 @@ cd /workdir/openwrt
 ./scripts/kconfig-tool --enable CONFIG_CGROUP_PIDS
 ./scripts/kconfig-tool --enable CONFIG_MEMCG
 
-# 3. 委托 kernel-config-patch.py 注入 olddefconfig (保留)
-python3 scripts/kernel-config-patch.py
+# 3. olddefconfig 已移至 diy-part2.sh 执行
