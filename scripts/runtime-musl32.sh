@@ -1,21 +1,17 @@
 #!/bin/bash
-# scripts/runtime-musl32.sh — 32 位 musl 运行时提取
-# 由 diy-part2.sh source 调用，CWD = openwrt/
-# 从 runtime/musl32.tar.gz 解压预构建 32 位 musl 库到 files/
+# scripts/runtime-musl32.sh — 强依赖版
+set -euo pipefail
 
-MUSL_TARBALL="${REPO_ROOT:-.}/runtime/musl32.tar.gz"
+TARBALL="runtime/musl32.tar.gz"
+DEST_DIR="files"
 
-if [ -f "$MUSL_TARBALL" ]; then
-    echo "Found pre-built musl32 tarball, extracting..."
-    tar -xzf "$MUSL_TARBALL" -C files/
-    if [ -f "files/lib/ld-musl-i386.so.1" ]; then
-        echo "  musl32 tarball extracted successfully"
-        ls -lh files/lib/ld-musl-i386.so.1
-        return 0
-    else
-        echo "  WARNING: musl32 tarball appears incomplete"
-    fi
+if [ ! -f "$TARBALL" ]; then
+    echo "❌ 致命错误: musl32 tarball 未找到: $TARBALL"
+    echo "   生成方法: cd repo-root && bash scripts/build-runtime-tarballs.sh"
+    echo "   musl 32-bit 支持是必需的，构建终止。"
+    exit 1
 fi
 
-echo "WARNING: musl32 tarball not found. musl 32-bit support will be unavailable."
-echo "To generate: cd repo-root && bash scripts/build-runtime-tarballs.sh"
+echo "==> 解压 musl 32-bit 运行时..."
+tar xzf "$TARBALL" -C "$DEST_DIR"
+echo "✅ musl 32-bit 运行时解压完成"
