@@ -16,7 +16,7 @@ echo "✅ 环境变量检查通过，工作区: $GITHUB_WORKSPACE"
 #   2. make defconfig（计算所有 Kconfig 依赖）
 #   3. apply_manifest（./scripts/config --disable BINARY/EXCLUDE，--enable SOURCE + PROVIDES 虚拟包）
 #      绝不再执行 make defconfig，否则 BINARY 禁用会被依赖树复活
-#   4. 下载 ipk / 二次 make download
+#   4. 下载 ipk
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$REPO_ROOT/scripts"
@@ -104,13 +104,6 @@ fi
 if [ -f "$SCRIPTS_DIR/verify-pkg-consistency.sh" ]; then
     echo "=== 校验 BINARY 包前后端一致性 ==="
     bash "$SCRIPTS_DIR/verify-pkg-consistency.sh" || exit 1
-fi
-
-# ============= 11. 校验 BINARY 包前后端一致性 =============
-if [ -d package/ ]; then
-    echo "=== 二次下载新增包源码 ==="
-    make download -j$(nproc) 2>/dev/null || \
-        echo "  WARNING: secondary download had issues (non-fatal)"
 fi
 
 echo "=== diy-part2.sh 完成 ==="
