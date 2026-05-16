@@ -117,6 +117,12 @@ jobs:
         sed -i 's/ $(tools\/stamp-compile)//;' Makefile
         echo "Toolchain building skipped due to cache hit"
 
+    - name: Defconfig
+      run: |
+        cd /workdir/openwrt
+        # 用 defconfig 自动补全 .config 中缺失的依赖，不会弹出图形界面
+        make defconfig
+
     - name: Compile tools and toolchain
       run: |
         cd /workdir/openwrt
