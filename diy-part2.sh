@@ -2,25 +2,20 @@
 set -e
 cd /workdir/openwrt
 
-# 1. 下载 kconfig-tool
+# 1. 下载 kconfig-tool 到 OpenWrt 的 scripts/ 下
 wget -O scripts/kconfig-tool https://raw.githubusercontent.com/torvalds/linux/master/scripts/config
 chmod +x scripts/kconfig-tool scripts/*.sh
 
-# 2. 注入 32 位运行时库到 files/（如果脚本存在则执行，不存在则跳过，避免报错退出）
-if [ -f scripts/runtime-musl32.sh ]; then
-    bash scripts/runtime-musl32.sh
-else
-    echo "⚠️ scripts/runtime-musl32.sh not found, skipping."
-fi
-
-if [ -f scripts/runtime-glibc32.sh ]; then
-    bash scripts/runtime-glibc32.sh
-else
-    echo "⚠️ scripts/runtime-glibc32.sh not found, skipping."
-fi
+# 2. 注入 32 位运行时库到 files/
+for script in runtime-musl32.sh runtime-glibc32.sh; do
+    if [ -f "$GITHUB_WORKSPACE/scripts/$script" ]; then
+        bash "$GITHUB_WORKSPACE/scripts/$script"
+    else
+        echo "⚠️ $script not found, skipping."
+    fi
+done
 
 # 3. 🚨 关键修复：写入目标平台种子配置
-# 没有这两行，make defconfig 不知道目标是 x86_64，会生成错误配置
 cat > .config <<EOF
 CONFIG_TARGET_x86=y
 CONFIG_TARGET_x86_64=y
@@ -29,12 +24,12 @@ EOF
 # 4. 生成标准 .config（基于种子扩展出完整配置）
 make defconfig
 
-# 5. 注入内核补丁与 Docker 内核依赖（此时操作已存在的 .config 才有效）
-bash scripts/kernel-config.sh
+# 5. 注入内核补丁与 Docker 内核依赖
+bash "$GITHUB_WORKSPACE/scripts/kernel-config.sh"
 
 # 5.5 注入内核编译期 olddefconfig 补丁
-if [ -f scripts/kernel-config-patch.py ]; then
-    python3 scripts/kernel-config-patch.py
+if [ -f "$GITHUB_WORKSPACE/scripts/kernel-config-patch.py" ]; then
+    python3 "$GITHUB_WORKSPACE/scripts/kernel-config-patch.py" include/kernel-defaults.mk
 else
     echo "⚠️ scripts/kernel-config-patch.py not found, skipping."
 fi
@@ -44,11 +39,10 @@ fi
 ./scripts/kconfig-tool --set-str CONFIG_CCACHE_DIR "/home/runner/.ccache"
 
 # 7.（可选）强制启用需要源码编译的包
-# 例如：如果需要编译 docker-ce 源码包，在此强制启用
 # ./scripts/kconfig-tool --enable CONFIG_PACKAGE_docker
 # ./scripts/kconfig-tool --enable CONFIG_PACKAGE_dockerd
 
-# 8. 设置 rootfs 大小（从环境变量读取，默认 4096）
+# 8. 设置 rootfs 大小
 if [ -n "$ROOTFS_SIZE" ]; then
     ./scripts/kconfig-tool --set-val CONFIG_TARGET_ROOTFS_PARTSIZE "$ROOTFS_SIZE"
 fi
