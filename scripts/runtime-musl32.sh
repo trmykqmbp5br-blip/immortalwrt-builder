@@ -14,4 +14,11 @@ fi
 
 echo "==> 解压 musl 32-bit 运行时..."
 tar xzf "$TARBALL" -C "$DEST_DIR"
+
+if [ ! -f "files/lib/ld-musl-i386.so.1" ]; then
+    echo "❌ 致命错误: musl32 tarball 解压后缺少 ld-musl-i386.so.1，tarball 可能损坏"
+    exit 1
+fi
+
 echo "✅ musl 32-bit 运行时解压完成"
+ls -lh files/lib/ld-musl-i386.so.1

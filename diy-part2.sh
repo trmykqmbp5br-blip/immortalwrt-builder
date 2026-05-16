@@ -80,8 +80,9 @@ echo "=========================================="
 echo "==> 注入 musl 32-bit 运行时"
 bash scripts/runtime-musl32.sh
 
-# --- glibc32 (可选) ---
-# bash scripts/runtime-glibc32.sh
+# --- glibc32 ---
+echo "==> 注入 glibc 32-bit 运行时"
+bash scripts/runtime-glibc32.sh
 
 # 严格校验：必须存在
 check_file() {
@@ -98,7 +99,7 @@ check_file() {
 check_file "files/usr/bin/run-i386"    "32位启动器 run-i386"
 check_file "files/lib/ld-musl-i386.so.1" "32位 musl 动态链接器"
 
-# 如果启用了 glibc32
-# check_file "files/lib32/glibc/ld-linux.so.2" "32位 glibc 动态链接器"
+# glibc32 关键文件
+check_file "files/lib32/glibc/ld-linux.so.2" "32位 glibc 动态链接器"
 
 echo "✅ 32 位运行时注入并校验成功"
