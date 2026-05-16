@@ -90,11 +90,14 @@ jobs:
         restore-keys: |
           dl-${{ env.REPO_BRANCH }}-
 
+    # ============= 恢复 ccache =============
     - name: Restore ccache
       uses: actions/cache/restore@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'scripts/diy-part1.sh') }}
+        # 核心：必须基于 .config 的哈希
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
+        # 兜底：如果 .config 变了导致没命中，去找该分支上次留下的旧缓存
         restore-keys: |
           ccache-${{ env.REPO_BRANCH }}-
 
@@ -153,7 +156,7 @@ jobs:
       if: '!cancelled()'
       with:
         path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'scripts/diy-part1.sh') }}
+        key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
 
     - name: Organize & Release
       if: env.UPLOAD_RELEASE == 'true' && success()
