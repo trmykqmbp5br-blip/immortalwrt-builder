@@ -108,14 +108,6 @@ jobs:
         key: toolchain-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}
         # 注意：没有 restore-keys！必须精确匹配，不能用旧工具链！
 
-    - name: Install build dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          flex bison m4 \
-          libfl-dev
-
     - name: Skip tools & toolchain compilation if cache hit
       if: steps.restore-toolchain.outputs.cache-hit == 'true'
       run: |
@@ -128,18 +120,12 @@ jobs:
     - name: Defconfig
       run: |
         cd /workdir/openwrt
-        export HOST_FLEX=/usr/bin/flex
-        export HOST_BISON=/usr/bin/bison
-        export M4=/usr/bin/m4
         # 用 defconfig 自动补全 .config 中缺失的依赖，不会弹出图形界面
         make defconfig
 
     - name: Compile tools and toolchain
       run: |
         cd /workdir/openwrt
-        export HOST_FLEX=/usr/bin/flex
-        export HOST_BISON=/usr/bin/bison
-        export M4=/usr/bin/m4
         if [ "${{ steps.restore-toolchain.outputs.cache-hit }}" == "true" ]; then
           echo "🎯 Toolchain cache hit! Skipping compilation."
         else
@@ -195,9 +181,6 @@ jobs:
       id: compile
       working-directory: /workdir/openwrt
       run: |
-        export HOST_FLEX=/usr/bin/flex
-        export HOST_BISON=/usr/bin/bison
-        export M4=/usr/bin/m4
         timeout 120 make defconfig
         echo "$(nproc) thread compile"
         if ! timeout 14400 make -j$(nproc) V=s; then
