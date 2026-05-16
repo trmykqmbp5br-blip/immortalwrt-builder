@@ -161,6 +161,7 @@ jobs:
 
     - name: Compile firmware
       id: compile
+      timeout-minutes: 15
       working-directory: /workdir/openwrt
       env:
         CCACHE_DIR: /home/runner/.ccache
