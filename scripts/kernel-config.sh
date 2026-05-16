@@ -41,18 +41,8 @@ patch_kernel_defaults_olddefconfig() {
         return
     fi
 
-    # 在 vermagic 行之后插入 olddefconfig
-    python3 <<-PYEOF
-content = open("$MK", "r").read()
-old = "MKHASH) md5 > \$(LINUX_DIR)/.vermagic\nendef"
-new = "MKHASH) md5 > \$(LINUX_DIR)/.vermagic\n\t\$(KERNEL_MAKE) olddefconfig 2>&1\nendef"
-if new not in content:
-    content = content.replace(old, new)
-    open("$MK", "w").write(content)
-    print("  olddefconfig injected into $MK")
-else:
-    print("  olddefconfig already present in $MK")
-PYEOF
+    # 替换原来的 here-doc 调用
+    python3 "$GITHUB_WORKSPACE/scripts/kernel-config-patch.py" "$MK"
 }
 
 # 统一预设内核选项，避免 syncconfig 交互式询问导致编译失败

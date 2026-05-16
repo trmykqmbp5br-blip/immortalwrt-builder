@@ -150,7 +150,7 @@ jobs:
         path: /workdir/openwrt/dl/
         key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
 
-    - name: Compile the firmware
+    - name: Compile firmware
       id: compile
       working-directory: /workdir/openwrt
       env:
@@ -158,9 +158,11 @@ jobs:
       run: |
         mkdir -p "$CCACHE_DIR"
         echo "$(nproc) thread compile"
-        if ! GITHUB_ENV=/dev/null timeout 14400 make -j$(nproc) V=s; then
+        # 将 GITHUB_ENV 指向 /dev/null，吸收编译过程中子脚本的所有环境变量写入
+        export GITHUB_ENV=/dev/null
+        if ! timeout 14400 make -j$(nproc) V=s; then
           echo "Parallel build failed, retrying with single thread..."
-          GITHUB_ENV=/dev/null timeout 28800 make -j1 V=s || exit $?
+          timeout 28800 make -j1 V=s || exit $?
         fi
 
     - name: ccache stats & maintenance
@@ -200,7 +202,7 @@ jobs:
     - name: Release firmware
       if: success()
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_REPO: ${{ github.repository }}
       run: |
         cd /workdir/openwrt/bin/targets/x86/64/
         IMG_FILE=$(find . -name "*combined*img.gz" -type f | head -n 1)
@@ -212,9 +214,8 @@ jobs:
         **immortalwrt-24.10.6-x86-64-generic-squashfs-sysupgrade.bin** - 在线升级
         NOTEEOF
         echo "Creating release ${TAG}..."
-        gh release create "${TAG}" ${IMG_FILE} ${BIN_FILE}           --title "${TITLE}" --notes-file release_notes.md
-        echo "Cleaning up old releases..."
+        gh release create "${TAG}" ${IMG_FILE} ${BIN_FILE} --title "${TITLE}" --notes-file release_notes.md
+        echo "Cleaning up old releases (keep latest 3)..."
         gh release list --limit 50 | tail -n +4 | awk '{print $1}' | while read -r tag; do
           gh release delete "${tag}" -y
-          git push origin --delete "${tag}" 2>/dev/null || true
         done

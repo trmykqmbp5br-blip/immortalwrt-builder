@@ -1,14 +1,22 @@
 #!/bin/bash
+set -e
+
+# ==========================================
+# P0 防御：检查关键环境变量
+# ==========================================
+: "${GITHUB_WORKSPACE:?❌ 错误：环境变量 GITHUB_WORKSPACE 未定义！请确保在 GitHub Actions 环境中运行，或手动 export 该变量。}"
+
+echo "✅ 环境变量检查通过，工作区: $GITHUB_WORKSPACE"
+
 # diy-part2.sh — 自定义配置编排器
 # 由 GitHub Actions 在 openwrt/ 目录下调用（CWD = openwrt/）
 #
 # 执行顺序：
 #   1. 内核/运行时补丁 + 修复 Makefile
-#   2. 生成 PROVIDES 虚拟包（custom-binary-provides）
-#   3. make defconfig（计算所有 Kconfig 依赖）
-#   4. apply_manifest（./scripts/config --disable BINARY/EXCLUDE，--enable SOURCE + PROVIDES 虚拟包）
+#   2. make defconfig（计算所有 Kconfig 依赖）
+#   3. apply_manifest（./scripts/config --disable BINARY/EXCLUDE，--enable SOURCE + PROVIDES 虚拟包）
 #      绝不再执行 make defconfig，否则 BINARY 禁用会被依赖树复活
-#   5. 下载 ipk / 二次 make download
+#   4. 下载 ipk / 二次 make download
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$REPO_ROOT/scripts"
@@ -32,18 +40,7 @@ done
 . "$SCRIPTS_DIR/runtime-musl32.sh"
 . "$SCRIPTS_DIR/runtime-glibc32.sh"
 
-# ============= 3. 生成 PROVIDES 虚拟包 =============
-# 读取 BINARY 包列表，生成 custom-binary-provides 的 PROVIDES 行
-# 这个包编译为空，但通过 PROVIDES 让依赖系统以为这些包已存在
-. "$SCRIPTS_DIR/binary-packages.sh" 2>/dev/null || true
-mkdir -p package/custom-provides
-if [ -f "$REPO_ROOT/package/custom-provides/Makefile" ]; then
-    sed "s/PROVIDES:=/PROVIDES:=$BINARY_PACKAGES_FLAT/" \
-        "$REPO_ROOT/package/custom-provides/Makefile" > package/custom-provides/Makefile
-    echo "  Generated package/custom-provides/Makefile with $(echo $BINARY_PACKAGES_FLAT | wc -w) providers"
-fi
-
-# ============= 4. make defconfig =============
+# ============= 3. make defconfig =============
 # CCACHE_DIR 注入：确保 OpenWrt 的 rules.mk export 的路径与 cache action 一致
 sed -i '/^CONFIG_CCACHE_DIR=/d' .config 2>/dev/null || true
 echo 'CONFIG_CCACHE_DIR="/home/runner/.ccache"' >> .config
@@ -52,7 +49,29 @@ make defconfig
 # ============= 5. apply_manifest =============
 # 使用 scripts/config --disable BINARY/EXCLUDE 包，--enable SOURCE 包
 # 【关键】之后绝不再执行 make defconfig
-. "$SCRIPTS_DIR/config-manifest.sh"
+# ==========================================
+# P0 防御：严格检查配置加载与变量定义
+# ==========================================
+
+# 1. 强制检查 source 是否成功，失败则立刻中断
+CONFIG_MANIFEST_PATH="$GITHUB_WORKSPACE/scripts/config-manifest.sh"
+if ! source "$CONFIG_MANIFEST_PATH"; then
+    echo "❌ 错误：无法加载 $CONFIG_MANIFEST_PATH！请检查文件是否存在及语法是否正确。"
+    exit 1
+fi
+
+# 2. 为关键变量设置安全默认值（防止 source 成功但变量未定义的极端情况）
+CONFIG_MANIFEST_BINARY="${CONFIG_MANIFEST_BINARY:-}"
+CONFIG_MANIFEST_EXCLUDE="${CONFIG_MANIFEST_EXCLUDE:-}"
+CONFIG_MANIFEST_SOURCE="${CONFIG_MANIFEST_SOURCE:-}"
+
+# 3. 状态日志（非常重要，方便排查是否加载成了空值）
+echo "✔️ Manifest 配置加载完成："
+echo "  - BINARY 包数量: $(echo $CONFIG_MANIFEST_BINARY | wc -w)"
+echo "  - EXCLUDE 包数量: $(echo $CONFIG_MANIFEST_EXCLUDE | wc -w)"
+echo "  - SOURCE 包数量: $(echo $CONFIG_MANIFEST_SOURCE | wc -w)"
+
+# 应用 manifest（此时即使变量为空，也是安全的空字符串，不会引发未定义行为）
 apply_manifest "$CONFIG_MANIFEST_BINARY" "$CONFIG_MANIFEST_EXCLUDE" "$CONFIG_MANIFEST_SOURCE"
 
 
