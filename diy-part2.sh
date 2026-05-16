@@ -36,8 +36,7 @@ export CCACHE_COMPRESS="true"
 
 # ============= 3. make defconfig =============
 # CCACHE_DIR 注入：确保 OpenWrt 的 rules.mk export 的路径与 cache action 一致
-sed -i '/^CONFIG_CCACHE_DIR=/d' .config 2>/dev/null || true
-echo 'CONFIG_CCACHE_DIR="/home/runner/.ccache"' >> .config
+./scripts/config --set-str CCACHE_DIR "/home/runner/.ccache"
 make defconfig
 
 # ============= 5. apply_manifest =============
