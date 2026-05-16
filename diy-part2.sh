@@ -18,6 +18,19 @@ for makefile in package/feeds/*/*/luci-app-fchomo/Makefile; do
         echo "  Fixed fchomo recursive dependency in $makefile"
 done
 
+# ============= 0. ccache 配置 =============
+echo "Enabling ccache and setting CONFIG_CCACHE_DIR..."
+
+sed -i 's/.*CONFIG_CCACHE.*/# CONFIG_CCACHE is not set/' .config 2>/dev/null || true
+sed -i 's/.*CONFIG_CCACHE_DIR.*/# CONFIG_CCACHE_DIR is not set/' .config 2>/dev/null || true
+
+cat >> .config <<EOF
+CONFIG_CCACHE=y
+CONFIG_CCACHE_DIR="/home/runner/.ccache"
+EOF
+
+echo "ccache enabled, CONFIG_CCACHE_DIR=/home/runner/.ccache"
+
 # ============= 1. 内核配置补丁 =============
 . "$SCRIPTS_DIR/kernel-config.sh"
 
@@ -101,13 +114,5 @@ if [ -n "$CUSTOM_PACKAGES" ]; then
     done
     echo "=== 第三方包处理完毕 ==="
 fi
-
-# ============= 7. CCACHE 配置 =============
-KCONFIG_TOOL="./scripts/kconfig-tool"
-# --- CCACHE ---
-# 不再使用 CCACHE_DIR，直接写死和 Actions 一致的路径
-CCACHE_DIR_PATH="/home/runner/.ccache"
-$KCONFIG_TOOL --enable CONFIG_CCACHE
-$KCONFIG_TOOL --set-str CONFIG_CCACHE_DIR "$CCACHE_DIR_PATH"
 
 echo "=== diy-part2.sh 完成 ==="
