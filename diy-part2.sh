@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # 赋予执行权限
-chmod +x scripts/kconfig-tool scripts/*.sh
+chmod +x scripts/*.sh
 
 # ============================================================
 # 阶段 1：补丁 Target Kernel Config（必须在 defconfig 之前！）
