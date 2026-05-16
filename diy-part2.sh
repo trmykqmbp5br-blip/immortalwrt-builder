@@ -20,7 +20,7 @@ chmod +x scripts/*.sh shell/*.sh 2>/dev/null || true
 # 执行顺序：
 #   1. 内核/运行时补丁 + 修复 Makefile
 #   2. make defconfig（计算所有 Kconfig 依赖）
-#   3. apply_manifest（./scripts/config --disable BINARY/EXCLUDE，--enable SOURCE + PROVIDES 虚拟包）
+#   3. apply_manifest（./scripts/kconfig-tool --disable BINARY/EXCLUDE，--enable SOURCE + PROVIDES 虚拟包）
 #      绝不再执行 make defconfig，否则 BINARY 禁用会被依赖树复活
 #   4. 下载 ipk
 
@@ -36,19 +36,19 @@ echo "=== diy-part2.sh 开始 ==="
 . "$SCRIPTS_DIR/runtime-musl32.sh"
 . "$SCRIPTS_DIR/runtime-glibc32.sh"
 
+# 下载 Linux 官方的 scripts/config 脚本，重命名为 kconfig-tool
+curl -sL https://raw.githubusercontent.com/torvalds/linux/master/scripts/config -o scripts/kconfig-tool
+chmod +x scripts/kconfig-tool
+
 # ============= 3. make defconfig =============
 # CCACHE_DIR 注入：确保 OpenWrt 的 rules.mk export 的路径与 cache action 一致
-./scripts/config --set-str CCACHE_DIR "/home/runner/.ccache"
+./scripts/kconfig-tool --set-str CCACHE_DIR "/home/runner/.ccache"
 make defconfig
 
 # 【关键修复】defconfig 后强制启用 ccache 并指定目录，防止被 Kconfig 重置为空
-./scripts/config --enable CCACHE
-./scripts/config --set-str CCACHE_DIR "/home/runner/.ccache"
-./scripts/config --enable CONFIG_CCACHE
-
-# 下载 Linux 内核的 scripts/config 并重命名，避免与 OpenWrt 的 scripts/config/ 目录冲突
-curl -sL https://raw.githubusercontent.com/torvalds/linux/master/scripts/config -o scripts/kconfig-tool
-chmod +x scripts/kconfig-tool
+./scripts/kconfig-tool --enable CCACHE
+./scripts/kconfig-tool --set-str CCACHE_DIR "/home/runner/.ccache"
+./scripts/kconfig-tool --enable CONFIG_CCACHE
 
 # ============= 5. apply_manifest =============
 # 使用 scripts/kconfig-tool --disable BINARY/EXCLUDE 包，--enable SOURCE 包
