@@ -67,7 +67,6 @@ BINARY_SOURCE[runc]="feed:packages"
 BINARY_SOURCE[tini]="feed:packages"
 BINARY_SOURCE[docker-compose]="feed:packages"
 BINARY_SOURCE[luci-lib-docker]="feed:luci"
-BINARY_SOURCE[luci-app-docker]="feed:luci"
 BINARY_SOURCE[luci-i18n-docker-zh-cn]="feed:luci"
 BINARY_SOURCE[luci-app-dockerman]="feed:luci"
 BINARY_SOURCE[luci-i18n-dockerman-zh-cn]="feed:luci"
@@ -120,11 +119,11 @@ CONFIG_MANIFEST_BINARY="$CONFIG_MANIFEST_BINARY luci-theme-argon luci-app-argon-
 # --- Docker（条件编译） ---
 if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
     CONFIG_MANIFEST_BINARY="$CONFIG_MANIFEST_BINARY docker dockerd containerd runc tini docker-compose"
-    CONFIG_MANIFEST_BINARY="$CONFIG_MANIFEST_BINARY luci-lib-docker luci-app-docker luci-i18n-docker-zh-cn"
+    CONFIG_MANIFEST_BINARY="$CONFIG_MANIFEST_BINARY luci-lib-docker luci-i18n-docker-zh-cn"
     CONFIG_MANIFEST_BINARY="$CONFIG_MANIFEST_BINARY luci-app-dockerman luci-i18n-dockerman-zh-cn"
 else
     CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE docker dockerd containerd runc tini docker-compose"
-    CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE luci-lib-docker luci-app-docker luci-i18n-docker-zh-cn"
+    CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE luci-lib-docker luci-i18n-docker-zh-cn"
     CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE luci-app-dockerman luci-i18n-dockerman-zh-cn"
 fi
 
@@ -135,7 +134,7 @@ fi
 CONFIG_MANIFEST_SOURCE=""
 
 # ==================== 排除包 ====================
-CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE luci-app-fchomo"
+# CONFIG_MANIFEST_EXCLUDE="$CONFIG_MANIFEST_EXCLUDE luci-app-fchomo"
 
 # ==================== 应用清单 ====================
 # 注意：apply_manifest() 不在本文件中调用，由 diy-part2.sh 在 make defconfig 之后执行

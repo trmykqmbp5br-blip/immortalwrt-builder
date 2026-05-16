@@ -14,6 +14,33 @@ if [ -z "$CONFIG_MANIFEST_BINARY" ]; then
 fi
 
 PROVIDES_LIST="$CONFIG_MANIFEST_BINARY"
+
+# ============= 黑名单：过滤官方源码中已声明 PROVIDES 的包 =============
+# 这些包编译时就提供了自己的 PROVIDES，重复声明会导致冲突
+echo "  Scanning for PROVIDES in official packages..."
+PROVIDES_BLACKLIST=""
+for mk in package/feeds/*/*/Makefile feeds/*/*/Makefile; do
+    [ -f "$mk" ] || continue
+    provides_line=$(grep -E '^PROVIDES:=' "$mk" 2>/dev/null | head -1)
+    [ -z "$provides_line" ] && continue
+    provides_pkgs="${provides_line#PROVIDES:=}"
+    for pkg in $provides_pkgs; do
+        pkg="${pkg#+}"
+        PROVIDES_BLACKLIST="$PROVIDES_BLACKLIST $pkg"
+    done
+done
+
+# 去重并过滤
+FILTERED_LIST=""
+for pkg in $PROVIDES_LIST; do
+    if echo " $PROVIDES_BLACKLIST " | grep -q " $pkg "; then
+        echo "  [SKIP] $pkg (official package already PROVIDES this)"
+    else
+        FILTERED_LIST="$FILTERED_LIST $pkg"
+    fi
+done
+PROVIDES_LIST="${FILTERED_LIST# }"
+
 OUTPUT_DIR="package/custom-provides"
 OUTPUT_FILE="$OUTPUT_DIR/Makefile"
 

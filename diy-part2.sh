@@ -27,12 +27,6 @@ echo "=== diy-part2.sh 开始 ==="
 export CCACHE_MAXSIZE="5G"
 export CCACHE_COMPRESS="true"
 
-# ============= 修复有问题的 feed 包 Makefile =============
-for makefile in package/feeds/*/*/luci-app-fchomo/Makefile; do
-    [ -f "$makefile" ] && sed -i 's/depends on.*PACKAGE_luci-app-fchomo/depends on +PACKAGE_luci-app-fchomo/' "$makefile" && \
-        echo "  Fixed fchomo recursive dependency in $makefile"
-done
-
 # ============= 1. 内核配置补丁 =============
 . "$SCRIPTS_DIR/kernel-config.sh"
 
