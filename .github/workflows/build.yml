@@ -84,20 +84,17 @@ jobs:
       uses: actions/cache/restore@v5
       with:
         path: /workdir/openwrt/dl
-        # 核心：用 feeds + diy-part1 的哈希区分版本
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'scripts/diy-part1.sh') }}
-        # 核心：如果没精确命中，找回该分支上次留下的最大旧缓存
+        key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
         restore-keys: |
           dl-${{ env.REPO_BRANCH }}-
 
     # ============= 1. 恢复 ccache =============
     - name: Restore ccache
+      id: restore-ccache
       uses: actions/cache/restore@v5
       with:
         path: ~/.ccache
-        # 核心：用 .config 的哈希区分不同配置
         key: ccache-${{ env.REPO_BRANCH }}-${{ hashFiles('.config') }}
-        # 兜底：如果 .config 变了导致没命中，找回该分支上次留下的旧 ccache
         restore-keys: |
           ccache-${{ env.REPO_BRANCH }}-
 
@@ -128,12 +125,11 @@ jobs:
 
     # ============= 2. 保存 dl 缓存 =============
     - name: Save dl cache
-      # 只有没精确命中（产生了新 key）时才保存，避免重复写同一 key
-      if: steps.restore-dl.outputs.cache-hit != 'true' && !cancelled()
+      if: '!cancelled()'
       uses: actions/cache/save@v5
       with:
         path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'scripts/diy-part1.sh') }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ github.run_id }}
 
     - name: Compile the firmware
       id: compile
@@ -153,7 +149,7 @@ jobs:
     # ============= 2. 保存 ccache =============
     - name: Save ccache
       continue-on-error: true
-      if: '!cancelled()'
+      if: steps.restore-ccache.outputs.cache-hit != 'true' && !cancelled()
       uses: actions/cache/save@v5
       with:
         path: ~/.ccache
