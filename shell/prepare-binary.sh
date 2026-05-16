@@ -136,7 +136,6 @@ check_gh_binary_deps() {
     echo "[INFO] NEEDED shared libs (ensure in firmware's lib paths):"
     readelf -d "$file" 2>/dev/null | awk '/NEEDED/{print "  - "$2}' | tr -d '[]'
 }
-}
 
 
 # 从 GitHub Releases 下载 binary tar.gz，解压到 files/ 下指定目录
