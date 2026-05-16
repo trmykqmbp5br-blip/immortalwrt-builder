@@ -156,12 +156,17 @@ jobs:
       run: |
         cd /workdir/openwrt/bin/targets/*/*
         rm -rf packages
-        gh release create "immortalwrt-24.10.6-${{ github.run_number }}" \
+        FACTORY=$(ls ./*squashfs-combined-efi.img.gz)
+        SYSupgrade=$(ls ./*squashfs-sysupgrade.bin)
+        TAG="immortalwrt-24.10.6-${{ github.run_number }}"
+        cp "$FACTORY" "/tmp/${TAG}--刷机.img.gz"
+        cp "$SYSupgrade" "/tmp/${TAG}--在线升级.bin"
+        gh release create "$TAG" \
           --repo ${{ github.repository }} \
           --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
           --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          ./*squashfs-combined-efi.img.gz \
-          ./*squashfs-sysupgrade.bin
+          "/tmp/${TAG}--刷机.img.gz" \
+          "/tmp/${TAG}--在线升级.bin"
         echo "=== 清理旧 Release ==="
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +4 \
