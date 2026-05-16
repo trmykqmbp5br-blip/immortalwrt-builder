@@ -1,8 +1,13 @@
-name: Build ImmortalWrt 24.10.6 x86_64
+name: Build ImmortalWrt x86_64
 
 on:
   workflow_dispatch:
     inputs:
+      repo_branch:
+        description: 'ImmortalWrt 分支或 Tag'
+        required: true
+        default: 'v24.10.6'
+        type: string
       rootfs_size:
         description: 'Rootfs size (MB)'
         required: true
@@ -22,7 +27,7 @@ permissions:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: v24.10.6
+  REPO_BRANCH: ${{ github.event.inputs.repo_branch }}
   TZ: Asia/Shanghai
 
 jobs:
@@ -160,11 +165,15 @@ jobs:
         cd /workdir/openwrt/bin/targets/x86/64/
         IMG_FILE=$(find . -name "*combined*img.gz" -type f | head -n 1)
         BIN_FILE=$(find . -name "*sysupgrade.bin" -type f | head -n 1)
-        TAG="v24.10.6-$(date +%Y%m%d-%H%M)"
-        TITLE="ImmortalWrt 24.10.6 Build $(date +%Y-%m-%d)"
-        cat > release_notes.md << 'NOTEEOF'
-        **immortalwrt-24.10.6-x86-64-generic-squashfs-combined.img.gz** - 物理刷机
-        **immortalwrt-24.10.6-x86-64-generic-squashfs-sysupgrade.bin** - 在线升级
+        TAG="${{ env.REPO_BRANCH }}-$(date +%Y%m%d-%H%M)"
+        TITLE="ImmortalWrt ${{ env.REPO_BRANCH }} Build $(date +%Y-%m-%d)"
+        cat > release_notes.md << NOTEEOF
+        **分支/版本**: ${{ env.REPO_BRANCH }}
+        **Docker支持**: ${{ github.event.inputs.include_docker }}
+        **Rootfs大小**: ${{ github.event.inputs.rootfs_size }}MB
+
+        **${IMG_FILE}** - 物理刷机
+        **${BIN_FILE}** - 在线升级
         NOTEEOF
         echo "Creating release ${TAG}..."
         gh release create "${TAG}" ${IMG_FILE} ${BIN_FILE} --title "${TITLE}" --notes-file release_notes.md
