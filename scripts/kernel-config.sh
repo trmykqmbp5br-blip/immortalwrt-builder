@@ -1,58 +1,80 @@
 #!/bin/bash
-# scripts/kernel-config.sh — 内核选项分治版
-set -euo pipefail
+# scripts/kernel-config.sh — 内核配置补丁
+# 由 diy-part2.sh source 调用，CWD = openwrt/
+# IA32_EMULATION + 内核新增选项
+#
+# 注意：x86_64 和 i386 有各自独立的内核配置，都需要打补丁
 
-# ==========================================
-# 动态检测 target kernel config 文件路径
-# ==========================================
-# OpenWrt 目录结构: target/linux/x86/64/config-6.18
-TARGET_DIR="target/linux/x86/64"
-KERNEL_CONFIG=$(ls "${TARGET_DIR}"/config-* 2>/dev/null | head -1)
+patch_ia32_emulation() {
+    local KERNEL_CONFIG="$1"
+    if [ -f "$KERNEL_CONFIG" ]; then
+        if grep -q "^CONFIG_IA32_EMULATION=y$" "$KERNEL_CONFIG" 2>/dev/null; then
+            echo "IA32_EMULATION already enabled in $KERNEL_CONFIG"
+        elif grep -q "^# CONFIG_IA32_EMULATION is not set$" "$KERNEL_CONFIG" 2>/dev/null; then
+            sed -i 's/^# CONFIG_IA32_EMULATION is not set$/CONFIG_IA32_EMULATION=y/' "$KERNEL_CONFIG"
+            echo "IA32_EMULATION enabled in $KERNEL_CONFIG"
+        elif grep -q "CONFIG_IA32_EMULATION" "$KERNEL_CONFIG" 2>/dev/null; then
+            sed -i 's/^.*CONFIG_IA32_EMULATION.*$/CONFIG_IA32_EMULATION=y/' "$KERNEL_CONFIG"
+            echo "IA32_EMULATION fixed in $KERNEL_CONFIG"
+        else
+            echo "CONFIG_IA32_EMULATION=y" >> "$KERNEL_CONFIG"
+            echo "IA32_EMULATION appended to $KERNEL_CONFIG"
+        fi
+    else
+        echo "WARNING: Kernel config not found at $KERNEL_CONFIG"
+    fi
+}
 
-if [ -z "$KERNEL_CONFIG" ]; then
-    echo "❌ 致命错误: 未找到 x86/64 内核配置文件 (target/linux/x86/64/config-*)"
-    exit 1
-fi
+# 同时打两个补丁：x86 公共 + x86_64 专有
+patch_ia32_emulation "target/linux/x86/config-6.6"
+patch_ia32_emulation "target/linux/x86/64/config-6.6"
 
-echo "📌 检测到内核配置文件: $KERNEL_CONFIG"
+# 在 Kernel/Configure/Default 末尾注入 olddefconfig，自动填充 NEW 选项默认值
+# 防止 kernel 版本升级引入的新选项导致 syncconfig exit 2
+patch_kernel_defaults_olddefconfig() {
+    local MK="$1"
+    [ -f "$MK" ] || { echo "WARNING: $MK not found, olddefconfig injection skipped"; return; }
+    command -v python3 >/dev/null 2>&1 || { echo "WARNING: python3 not found, olddefconfig injection skipped"; return; }
 
-# ==========================================
-# 定义要追加的内核选项
-# ==========================================
-KERNEL_OPTS=(
-    "CONFIG_IA32_EMULATION=y"
-)
+    if grep -q "^	\$(KERNEL_MAKE) olddefconfig" "$MK" 2>/dev/null; then
+        echo "  olddefconfig already patched in $MK"
+        return
+    fi
 
-if [ "${INCLUDE_DOCKER:-no}" = "yes" ]; then
-    echo "==> 追加 Docker 相关内核选项..."
-    KERNEL_OPTS+=(
-        # 网络虚拟化
-        "CONFIG_VETH=y"
-        "CONFIG_MACVLAN=y"
-        "CONFIG_IPVLAN=y"
-        "CONFIG_VXLAN=y"
-        # Netfilter / IPVS
-        "CONFIG_IP_VS=y"
-        "CONFIG_IP_VS_NFCT=y"
-        "CONFIG_IP_VS_RR=y"
-        "CONFIG_NF_NAT=y"
-        # Cgroup
-        "CONFIG_CGROUP_DEVICE=y"
-        "CONFIG_CGROUP_PERF=y"
-        "CONFIG_CGROUP_NET_PRIO=y"
-        "CONFIG_CGROUP_NET_CLASSID=y"
-    )
-fi
+    # 在 vermagic 行之后插入 olddefconfig
+    python3 <<-PYEOF
+content = open("$MK", "r").read()
+old = "MKHASH) md5 > \$(LINUX_DIR)/.vermagic\nendef"
+new = "MKHASH) md5 > \$(LINUX_DIR)/.vermagic\n\t\$(KERNEL_MAKE) olddefconfig 2>&1\nendef"
+if new not in content:
+    content = content.replace(old, new)
+    open("$MK", "w").write(content)
+    print("  olddefconfig injected into $MK")
+else:
+    print("  olddefconfig already present in $MK")
+PYEOF
+}
 
-# ==========================================
-# 追加到内核配置文件（不重复追加）
-# ==========================================
-for opt in "${KERNEL_OPTS[@]}"; do
-    key="${opt%%=*}"
-    # 先删除已有行（包括 "=y", "=m", "# ... is not set" 形式）
-    sed -i "/^${key}=/d; /^# ${key} /d" "$KERNEL_CONFIG"
-    # 追加新行
-    echo "$opt" >> "$KERNEL_CONFIG"
+# 统一预设内核选项，避免 syncconfig 交互式询问导致编译失败
+# 格式: OPTION=VALUE（VALUE=disabled 表示禁用该选项）
+for KERNEL_CONFIG in target/linux/x86/config-6.6 target/linux/x86/64/config-6.6; do
+    [ -f "$KERNEL_CONFIG" ] || continue
+    for entry in NET_9P_XEN=disabled ARCH_MMAP_RND_COMPAT_BITS=8 XFRM_USER_COMPAT=disabled; do
+        opt="${entry%%=*}"
+        val="${entry#*=}"
+        if [ "$val" = "disabled" ]; then
+            if ! grep -q "^# $opt is not set$\|^$opt=" "$KERNEL_CONFIG" 2>/dev/null; then
+                echo "# $opt is not set" >> "$KERNEL_CONFIG"
+                echo "  $opt disabled ($KERNEL_CONFIG)"
+            fi
+        else
+            if ! grep -q "^$opt=" "$KERNEL_CONFIG" 2>/dev/null; then
+                echo "$opt=$val" >> "$KERNEL_CONFIG"
+                echo "  $opt=$val ($KERNEL_CONFIG)"
+            fi
+        fi
+    done
 done
 
-echo "✅ 内核选项已写入 $KERNEL_CONFIG"
+# Inject olddefconfig to auto-fill NEW kernel options
+patch_kernel_defaults_olddefconfig "include/kernel-defaults.mk"

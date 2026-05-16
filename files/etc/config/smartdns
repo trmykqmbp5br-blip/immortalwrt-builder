@@ -22,7 +22,7 @@ config smartdns
 	option tls_server '1'
 	option tls_server_port '853'
 	option doh_server '1'
-	option doh_server_port '443'
+	option doh_server_port '843'
 	option bind_device '1'
 	option cache_persist '1'
 	option resolve_local_hostnames '1'

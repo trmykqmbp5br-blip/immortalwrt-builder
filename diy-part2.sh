@@ -1,105 +1,76 @@
 #!/bin/bash
-# diy-part2.sh — 分治版
-set -euo pipefail
+# diy-part2.sh — 自定义配置编排器
+# 由 GitHub Actions 在 openwrt/ 目录下调用（CWD = openwrt/）
+# 按序加载 scripts/ 下的领域模块
 
-# 赋予执行权限
-chmod +x scripts/*.sh
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS_DIR="$REPO_ROOT/scripts"
 
-# ============================================================
-# 阶段 1：补丁 Target Kernel Config（必须在 defconfig 之前！）
-# ============================================================
-echo "=========================================="
-echo "阶段 1: 补丁内核配置文件"
-echo "=========================================="
-bash scripts/kernel-config.sh
+echo "=== diy-part2.sh 开始 ==="
 
-# ============================================================
-# 阶段 2：生成完整 .config（此时内核选项已包含在内）
-# ============================================================
-echo "=========================================="
-echo "阶段 2: 生成基础配置"
-echo "=========================================="
-cat > .config <<EOF
-CONFIG_TARGET_x86=y
-CONFIG_TARGET_x86_64=y
-EOF
-
-# defconfig 是安全的——因为 CCACHE 还没开启，不会被冲掉
-echo "==> make defconfig（展开完整默认配置，含内核选项）"
-make defconfig
-
-# ============================================================
-# 阶段 3：仅修改 OpenWrt 层配置（kconfig-tool）
-# ============================================================
-echo "=========================================="
-echo "阶段 3: 注入 OpenWrt 层自定义配置"
-echo "=========================================="
-KCONFIG_TOOL="./scripts/kconfig-tool"
-
-# --- CCACHE ---
-CCACHE_DIR_PATH="${CCACHE_DIR:-/home/runner/.ccache}"
-$KCONFIG_TOOL --enable CONFIG_CCACHE
-$KCONFIG_TOOL --set-str CONFIG_CCACHE_DIR "$CCACHE_DIR_PATH"
-
-# --- Rootfs 大小 ---
-ROOTFS_SIZE="${ROOTFS_PARTSIZE:-1024}"
-$KCONFIG_TOOL --set-val CONFIG_TARGET_ROOTFS_PARTSIZE "$ROOTFS_SIZE"
-
-# --- 在此处添加其他 OpenWrt 层选项 ---
-# 例：$KCONFIG_TOOL --enable PACKAGE_luci-app-docker
-
-# ============================================================
-# 阶段 4：解决依赖（只跑一次 olddefconfig，不需要任何 Makefile 补丁）
-# ============================================================
-echo "=========================================="
-echo "阶段 4: 解决所有配置依赖"
-echo "=========================================="
-make olddefconfig
-
-# 防御性校验：CCACHE 没被冲
-if ! grep -q "CONFIG_CCACHE_DIR=\"$CCACHE_DIR_PATH\"" .config; then
-    echo "❌ 错误: CCACHE 路径未正确写入 .config！"
-    exit 1
-fi
-
-# 防御性校验：关键内核选项确实存在于 .config
-for opt in CONFIG_IA32_EMULATION; do
-    if ! grep -q "^${opt}=y" .config; then
-        echo "⚠️ 警告: ${opt} 未在 .config 中生效，可能内核版本不兼容"
-    fi
+# ============= 禁用有问题的包 =============
+# 1. .config 层面禁用 fchomo
+sed -i 's/.*CONFIG_PACKAGE_luci-app-fchomo.*/# CONFIG_PACKAGE_luci-app-fchomo is not set/' .config 2>/dev/null || true
+# 2. 修复 Kconfig 层面的自引用递归依赖
+#    (luci-app-fchomo 的 Makefile 有 "depends on PACKAGE_luci-app-fchomo")
+for makefile in package/feeds/*/*/luci-app-fchomo/Makefile; do
+    [ -f "$makefile" ] && sed -i 's/depends on.*PACKAGE_luci-app-fchomo/depends on +PACKAGE_luci-app-fchomo/' "$makefile" && \
+        echo "  Fixed fchomo recursive dependency in $makefile"
 done
 
-# ============================================================
-# 阶段 5：32 位运行时注入（强依赖 + 严格校验）
-# ============================================================
-echo "=========================================="
-echo "阶段 5: 32 位运行时注入"
-echo "=========================================="
+# ============= 1. 内核配置补丁 =============
+. "$SCRIPTS_DIR/kernel-config.sh"
 
-# --- musl32 ---
-echo "==> 注入 musl 32-bit 运行时"
-bash scripts/runtime-musl32.sh
+# ============= 2. 32 位 musl 运行时 =============
+. "$SCRIPTS_DIR/runtime-musl32.sh"
 
-# --- glibc32 ---
-echo "==> 注入 glibc 32-bit 运行时"
-bash scripts/runtime-glibc32.sh
+# ============= 3. 32 位 glibc 运行时 =============
+. "$SCRIPTS_DIR/runtime-glibc32.sh"
 
-# 严格校验：必须存在
-check_file() {
-    local file="$1"
-    local desc="$2"
-    if [ ! -e "$file" ]; then
-        echo "❌ 致命错误: ${desc} 缺失: ${file}"
-        echo "   构建终止。请检查 runtime tarball 是否存在且脚本正确。"
-        exit 1
+# ============= 4. Docker 开关 =============
+. "$SCRIPTS_DIR/docker-toggle.sh"
+
+# ============= 5. Rootfs 大小调整 =============
+if [ -n "${ROOTFS_SIZE:-}" ] && [ "$ROOTFS_SIZE" != "4096" ]; then
+    echo "Setting rootfs size to ${ROOTFS_SIZE} MB..."
+    sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=[0-9]*/CONFIG_TARGET_ROOTFS_PARTSIZE=${ROOTFS_SIZE}/" .config
+fi
+
+# ============= 6. 第三方自定义软件包 =============
+CUSTOM_PACKAGES=""
+
+if [ -f "$REPO_ROOT/shell/custom-packages.sh" ]; then
+    . "$REPO_ROOT/shell/custom-packages.sh"
+fi
+
+# 处理 store .run 包
+if [ -n "$CUSTOM_PACKAGES" ] && echo "$CUSTOM_PACKAGES" | grep -q "luci-app-store"; then
+    if [ -f "$REPO_ROOT/shell/prepare-store.sh" ]; then
+        . "$REPO_ROOT/shell/prepare-store.sh"
+        prepare_store_packages "files" "$CUSTOM_PACKAGES"
+        CUSTOM_PACKAGES=$(echo "$CUSTOM_PACKAGES" | sed 's/luci-app-store//g' | xargs)
     fi
-}
+fi
 
-# musl32 关键文件
-check_file "files/usr/bin/run-i386"    "32位启动器 run-i386"
-check_file "files/lib/ld-musl-i386.so.1" "32位 musl 动态链接器"
+# 写入 .config
+if [ -n "$CUSTOM_PACKAGES" ]; then
+    echo "=== 启用第三方软件包 ==="
+    for pkg in $CUSTOM_PACKAGES; do
+        if echo "$pkg" | grep -q '^-'; then
+            pkg_name=$(echo "$pkg" | sed 's/^-//')
+            echo "  排除: $pkg_name"
+            sed -i "s/.*CONFIG_PACKAGE_${pkg_name}=y/# CONFIG_PACKAGE_${pkg_name} is not set/" .config 2>/dev/null || true
+        else
+            echo "  启用: $pkg"
+            pkg_conf=$(echo "$pkg" | sed 's/-/_/g')
+            if grep -q "CONFIG_PACKAGE_${pkg_conf}[= ]" .config 2>/dev/null; then
+                sed -i "s/.*CONFIG_PACKAGE_${pkg_conf}.*/CONFIG_PACKAGE_${pkg_conf}=y/" .config
+            else
+                echo "CONFIG_PACKAGE_${pkg_conf}=y" >> .config
+            fi
+        fi
+    done
+    echo "=== 第三方包处理完毕 ==="
+fi
 
-# glibc32 关键文件
-check_file "files/lib32/glibc/ld-linux.so.2" "32位 glibc 动态链接器"
-
-echo "✅ 32 位运行时注入并校验成功"
+echo "=== diy-part2.sh 完成 ==="

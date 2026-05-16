@@ -200,10 +200,10 @@ else
 fi
 
 # 通用设置
-uci delete ttyd.@ttyd[0].interface 2>/dev/null || true
+uci delete ttyd.@ttyd[0].interface
 
 # 所有网口可 SSH
-uci delete dropbear.@dropbear[0].Interface
+uci set dropbear.@dropbear[0].Interface=''
 uci commit
 
 # 编译作者信息
@@ -218,4 +218,4 @@ if opkg list-installed | grep -q '^luci-app-advancedplus '; then
 fi
 
 echo "99-custom.sh completed at $(date) (status=$STATUS)" >>$LOGFILE
-exit 0
+exit $STATUS

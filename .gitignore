@@ -1,9 +1,6 @@
 id_ed25519_claude
 *.img.gz
 *.tar.gz
-!runtime/*.tar.gz
 firmware-download/
 *.log
 *.tmp
-.env
-*.key

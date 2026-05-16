@@ -1,10 +1,4 @@
-## 项目规则
-
-### 文档同步
-
-修改 `diy-part1.sh`、`diy-part2.sh`、`scripts/kernel-config.sh`、`.github/workflows/build.yml` 后，必须同步检查 `docs/使用说明.md` 中的接口描述和流程说明是否需要更新。
-
-### Agent skills
+## Agent skills
 
 ### Issue tracker
 

@@ -1,16 +1,12 @@
 #!/bin/bash
-set -e
+# diy-part1.sh - 自定义软件源 (在 feeds update/install 前运行)
 
-cd /workdir/openwrt
+# ============= 第三方 feeds =============
+# kenzo: PassWall, SSR-Plus, OpenClash, MosDNS, TurboACC 等
+echo "src-git kenzo https://github.com/kenzok8/openwrt-packages.git;master" >> feeds.conf.default
 
-# 1. 添加必要的第三方 feeds (如需从源码编译特定第三方包，在此添加源)
-# 若只编译官方包，此段可删
-# cat >> feeds.conf.default <<EOF
-# src-git kenzo https://github.com/kenzok8/openwrt-packages
-# EOF
+# small: 依赖包 (xray-core, sing-box, hysteria 等)
+echo "src-git small https://github.com/kenzok8/small.git;master" >> feeds.conf.default
 
-# 2. 标准的 feeds 更新与安装 (不再有任何篡改)
-./scripts/feeds update -a
-./scripts/feeds install -a
-
-echo "✅ diy-part1: Feeds installed natively."
+# sirpdboy: 高级设置、分区扩容、酷猫主题等
+# echo "src-git sirpdboy https://github.com/sirpdboy/sirpdboy-package.git;main" >> feeds.conf.default
