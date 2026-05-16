@@ -46,8 +46,12 @@ make defconfig
 ./scripts/config --set-str CCACHE_DIR "/home/runner/.ccache"
 ./scripts/config --enable CONFIG_CCACHE
 
+# 下载 Linux 内核的 scripts/config 并重命名，避免与 OpenWrt 的 scripts/config/ 目录冲突
+curl -sL https://raw.githubusercontent.com/torvalds/linux/master/scripts/config -o scripts/kconfig-tool
+chmod +x scripts/kconfig-tool
+
 # ============= 5. apply_manifest =============
-# 使用 scripts/config --disable BINARY/EXCLUDE 包，--enable SOURCE 包
+# 使用 scripts/kconfig-tool --disable BINARY/EXCLUDE 包，--enable SOURCE 包
 # 【关键】之后绝不再执行 make defconfig
 # ==========================================
 # P0 防御：严格检查配置加载与变量定义
