@@ -8,6 +8,12 @@ set -e
 
 echo "✅ 环境变量检查通过，工作区: $GITHUB_WORKSPACE"
 
+export CCACHE_DIR="/home/runner/.ccache"
+export CCACHE_MAXSIZE="5G"
+export CCACHE_COMPRESS="true"
+
+chmod +x scripts/*.sh shell/*.sh 2>/dev/null || true
+
 # diy-part2.sh — 自定义配置编排器
 # 由 GitHub Actions 在 openwrt/ 目录下调用（CWD = openwrt/）
 #
@@ -23,10 +29,6 @@ SCRIPTS_DIR="$REPO_ROOT/scripts"
 
 echo "=== diy-part2.sh 开始 ==="
 
-# ccache 限制 5GB + 启用压缩
-export CCACHE_MAXSIZE="5G"
-export CCACHE_COMPRESS="true"
-
 # ============= 1. 内核配置补丁 =============
 . "$SCRIPTS_DIR/kernel-config.sh"
 
@@ -38,6 +40,11 @@ export CCACHE_COMPRESS="true"
 # CCACHE_DIR 注入：确保 OpenWrt 的 rules.mk export 的路径与 cache action 一致
 ./scripts/config --set-str CCACHE_DIR "/home/runner/.ccache"
 make defconfig
+
+# 【关键修复】defconfig 后强制启用 ccache 并指定目录，防止被 Kconfig 重置为空
+./scripts/config --enable CCACHE
+./scripts/config --set-str CCACHE_DIR "/home/runner/.ccache"
+./scripts/config --enable CONFIG_CCACHE
 
 # ============= 5. apply_manifest =============
 # 使用 scripts/config --disable BINARY/EXCLUDE 包，--enable SOURCE 包
@@ -106,3 +113,11 @@ if [ -f "$SCRIPTS_DIR/verify-pkg-consistency.sh" ]; then
 fi
 
 echo "=== diy-part2.sh 完成 ==="
+
+echo "==================== CCACHE DEBUG ===================="
+echo "Env CCACHE_DIR: $CCACHE_DIR"
+echo "Config CCACHE_DIR: $(grep CONFIG_CCACHE_DIR .config)"
+echo "Config CCACHE_ENABLE: $(grep CONFIG_CCACHE .config)"
+echo "ccache directory status:"
+ccache -s 2>&1 | head -n 5
+echo "====================================================="

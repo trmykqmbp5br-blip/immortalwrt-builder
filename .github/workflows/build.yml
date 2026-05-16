@@ -79,13 +79,19 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
+    # 获取日期（与 ccache 一致）
+    - name: Get date for dl cache key
+      id: dl-date
+      run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
+
+    # 恢复缓存
     - name: Restore dl cache
-      id: restore-dl
       uses: actions/cache/restore@v5
       with:
-        path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+        path: /workdir/openwrt/dl/
+        key: dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
         restore-keys: |
+          dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-
           dl-${{ env.REPO_BRANCH }}-
 
     - name: Get date for ccache key
@@ -135,21 +141,23 @@ jobs:
         echo "=== 下载后 ==="
         df -hT .
 
+    # 构建成功时保存（key 含日期，每天可写入一条新缓存）
     - name: Save dl cache on success
       if: success()
       continue-on-error: true
       uses: actions/cache/save@v5
       with:
         path: /workdir/openwrt/dl/
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
 
+    # 构建失败时保存（带 -failed- 后缀，不冲突）
     - name: Save dl cache on failure
       if: failure()
       continue-on-error: true
       uses: actions/cache/save@v5
       with:
         path: /workdir/openwrt/dl/
-        key: dl-${{ env.REPO_BRANCH }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
+        key: dl-${{ env.REPO_BRANCH }}-${{ steps.dl-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}-failed-${{ github.run_number }}
 
     - name: Compile firmware
       id: compile
@@ -158,6 +166,13 @@ jobs:
         CCACHE_DIR: /home/runner/.ccache
       run: |
         mkdir -p "$CCACHE_DIR"
+        # 确保 runner 用户有写权限
+        sudo chown -R runner:runner /home/runner/.ccache 2>/dev/null || true
+        chmod -R 777 /home/runner/.ccache 2>/dev/null || true
+        # 重置计数器，编译结束后的 ccache -s 才能真实反映本次构建命中情况
+        ccache -z
+        ccache -M 5G
+        ccache -s
         echo "$(nproc) thread compile"
         # 将 GITHUB_ENV 指向 /dev/null，吸收编译过程中子脚本的所有环境变量写入
         export GITHUB_ENV=/dev/null
