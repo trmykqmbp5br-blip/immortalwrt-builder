@@ -1,11 +1,17 @@
 #!/bin/bash
 cd /workdir/openwrt
 
-KERNEL_CONFIG_FILE="target/linux/x86/64/config-6.6"
+# 自动探测 x86/64 下的内核配置文件
+KERNEL_CONFIG_FILE=$(ls target/linux/x86/64/config-* 2>/dev/null | head -n 1)
+
+if [ -z "$KERNEL_CONFIG_FILE" ]; then
+    echo "❌ Error: Kernel config file not found in target/linux/x86/64/"
+    exit 1
+fi
+
+echo "📌 Patching kernel config: $KERNEL_CONFIG_FILE"
 
 # ==== 基础配置（始终启用）====
-# 清除旧配置块 + 旧定义，再重新追加
-sed -i '/^# === Custom: 32-bit support/,/^CONFIG_IA32_EMULATION=y$/d' "$KERNEL_CONFIG_FILE"
 cat >> "$KERNEL_CONFIG_FILE" <<EOF
 
 # === Custom: 32-bit support ===
@@ -14,9 +20,6 @@ EOF
 
 # ==== Docker 内核依赖（仅在 INCLUDE_DOCKER=yes 时启用）====
 if [ "$INCLUDE_DOCKER" = "yes" ]; then
-    # 清除旧配置块 + 旧定义
-    sed -i '/^# === Custom: Docker required modules/,/^CONFIG_MEMCG=y$/d' "$KERNEL_CONFIG_FILE"
-
     cat >> "$KERNEL_CONFIG_FILE" <<DOCKEREOF
 
 # === Custom: Docker required modules ===

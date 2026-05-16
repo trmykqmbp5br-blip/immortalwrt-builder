@@ -83,7 +83,7 @@ jobs:
       with:
         path: /workdir/openwrt/dl/
         # 注意这里末尾加了 '-'，使其变成前缀匹配
-        key: dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-${{ hashFiles('diy-part1.sh', 'diy-part2.sh', 'scripts/kernel-config.sh') }}-
+        key: dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-${{ hashFiles('diy-part1.sh', 'scripts/kernel-config.sh') }}-
         restore-keys: |
           dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-
           dl-${{ env.REPO_BRANCH }}-
@@ -106,7 +106,7 @@ jobs:
       uses: actions/cache/save@v5
       with:
         path: /workdir/openwrt/dl/
-        key: dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-${{ hashFiles('diy-part1.sh', 'diy-part2.sh', 'scripts/kernel-config.sh') }}-run_${{ github.run_id }}-
+        key: dl-${{ env.REPO_BRANCH }}-${{ steps.cache-date.outputs.date }}-${{ hashFiles('diy-part1.sh', 'scripts/kernel-config.sh') }}-run_${{ github.run_id }}-
 
     # ====== ccache 缓存 ======
     - name: Restore ccache

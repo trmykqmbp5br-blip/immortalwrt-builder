@@ -33,7 +33,11 @@ make defconfig
 bash scripts/kernel-config.sh
 
 # 5.5 注入内核编译期 olddefconfig 补丁
-python3 scripts/kernel-config-patch.py
+if [ -f scripts/kernel-config-patch.py ]; then
+    python3 scripts/kernel-config-patch.py
+else
+    echo "⚠️ scripts/kernel-config-patch.py not found, skipping."
+fi
 
 # 6. 启用 CCACHE 强锁
 ./scripts/kconfig-tool --enable CONFIG_CCACHE
