@@ -5,3 +5,5 @@ id_ed25519_claude
 firmware-download/
 *.log
 *.tmp
+.env
+*.key
