@@ -92,15 +92,6 @@ jobs:
       id: ccache-date
       run: echo "date=$(/bin/date -u "+%Y%m%d")" >> "$GITHUB_OUTPUT"
 
-    - name: ccache cache
-      uses: actions/cache@v5
-      with:
-        path: /home/runner/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
-        restore-keys: |
-          ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-
-          ccache-${{ env.REPO_BRANCH }}-
-
     - name: Configure feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
@@ -124,6 +115,15 @@ jobs:
         make defconfig
         chmod +x $GITHUB_WORKSPACE/$DIY_P2_SH
         $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: ccache cache
+      uses: actions/cache@v5
+      with:
+        path: /home/runner/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-${{ hashFiles('feeds.conf.default', 'diy-part1.sh') }}
+        restore-keys: |
+          ccache-${{ env.REPO_BRANCH }}-${{ steps.ccache-date.outputs.date }}-
+          ccache-${{ env.REPO_BRANCH }}-
 
     - name: Download sources
       working-directory: /workdir/openwrt
