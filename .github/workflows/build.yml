@@ -92,6 +92,8 @@ jobs:
       run: bash diy-part1.sh
 
     - name: Apply custom config
+      env:
+        ROOTFS_SIZE: ${{ github.event.inputs.rootfs_size }}
       run: bash diy-part2.sh
 
     - name: Download sources
