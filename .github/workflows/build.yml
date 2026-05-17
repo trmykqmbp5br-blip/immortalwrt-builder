@@ -223,12 +223,18 @@ jobs:
         cd /workdir/openwrt/bin/targets/*/*
         FACTORY=$(ls ./*squashfs-combined-efi.img.gz)
         TAG="immortalwrt-24.10.6-${{ github.run_number }}"
-        cp "$FACTORY" "/tmp/${TAG}-factory.img.gz"
+        cp "$FACTORY" "/tmp/${TAG}-shuaji.img.gz"
+        UPGRADE=$(ls ./*squashfs-combined.img.gz 2>/dev/null || true)
+        RELEASE_FILES="/tmp/${TAG}-shuaji.img.gz"
+        if [ -n "$UPGRADE" ]; then
+          cp "$UPGRADE" "/tmp/${TAG}-shengji.img.gz"
+          RELEASE_FILES="$RELEASE_FILES /tmp/${TAG}-shengji.img.gz"
+        fi
         gh release create "$TAG" \
           --repo ${{ github.repository }} \
           --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
           --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          "/tmp/${TAG}-factory.img.gz"
+          $RELEASE_FILES
         echo "=== 清理旧 Release ==="
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +4 \
