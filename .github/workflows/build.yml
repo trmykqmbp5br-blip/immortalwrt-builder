@@ -194,14 +194,14 @@ jobs:
         path: /workdir/openwrt/dl
         key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
 
-    # ============= 清理 dl 缓存（超 2G 删最旧） =============
+    # ============= 清理 dl 缓存（超 2G 删最旧，仅编译成功时清理） =============
     - name: Clean old dl caches
-      if: always()
+      if: success()
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         PREFIX="dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-"
-        gh cache list --json id,key,sizeInBytes,createdAt \
+        gh cache list --limit 100 --json id,key,sizeInBytes,createdAt \
           --jq ".[] | select(.key | startswith(\"$PREFIX\")) | {id,key,sizeInBytes,createdAt}" \
           | jq -s 'sort_by(.createdAt) | reverse' > /tmp/dl_caches.json
         TOTAL=$(jq '[.[].sizeInBytes] | add // 0' /tmp/dl_caches.json)
@@ -222,14 +222,14 @@ jobs:
         path: ~/.ccache
         key: ccache-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-${{ github.run_id }}
 
-    # ============= 清理 ccache 缓存（超 2G 删最旧） =============
+    # ============= 清理 ccache 缓存（超 2G 删最旧，仅编译成功时清理） =============
     - name: Clean old ccache caches
-      if: always()
+      if: success()
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         PREFIX="ccache-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-"
-        gh cache list --json id,key,sizeInBytes,createdAt \
+        gh cache list --limit 100 --json id,key,sizeInBytes,createdAt \
           --jq ".[] | select(.key | startswith(\"$PREFIX\")) | {id,key,sizeInBytes,createdAt}" \
           | jq -s 'sort_by(.createdAt) | reverse' > /tmp/ccache_caches.json
         TOTAL=$(jq '[.[].sizeInBytes] | add // 0' /tmp/ccache_caches.json)
