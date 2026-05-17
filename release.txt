@@ -10,12 +10,11 @@ ImmortalWrt 24.10.6 x86_64 自动构建固件
  - 已预置 SSH 公钥认证
 
 固件文件:
- - *squashfs-combined-efi.img.gz — factory 刷机包（第一次刷写用）
- - *squashfs-sysupgrade.bin — 在线升级包（如存在，Web/命令行升级用）
+ - *-factory.img.gz — 固件包（刷机/升级通用）
 
 刷写方式:
- 1. 第一次刷写: 使用 combined-efi.img.gz（解压后用写盘工具写入或直接上传 img.gz）
- 2. 在线升级: Web 界面 系统 → 备份/升级 → 刷写固件，或命令行 sysupgrade -f backup.tar.gz <sysupgrade.bin>
+ 1. Web 界面: 系统 → 备份/升级 → 刷写固件，上传 img.gz
+ 2. 写盘: 解压后用 balenaEtcher / Rufus / dd 写入硬盘或 U 盘
 
 首次启动时 99-custom.sh 会动态检测网口并配置网络。
 单网口: DHCP 模式，WAN 防火墙开放以允许 WebUI 访问
