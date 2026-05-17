@@ -116,3 +116,14 @@ if [ -n "$CUSTOM_PACKAGES" ]; then
 fi
 
 echo "=== diy-part2.sh 完成 ==="
+
+# ============= 最终校验：所有 kmod 必须 =y，不允许残留 =m =============
+echo "==> 校验 kmod 包: 强制所有 kmod-* 为 =y..."
+while IFS= read -r line; do
+    pkg=$(echo "$line" | grep -o 'CONFIG_PACKAGE_kmod_[^=]*')
+    if [ -n "$pkg" ]; then
+        sed -i "s/${pkg}=m/${pkg}=y/" .config
+        echo "  ${pkg}: =m → =y"
+    fi
+done < .config
+echo "✅ kmod 校验完成"

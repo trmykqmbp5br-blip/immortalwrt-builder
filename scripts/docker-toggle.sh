@@ -11,6 +11,9 @@ if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
     sed -i 's/.*CONFIG_PACKAGE_luci-lib-docker.*/CONFIG_PACKAGE_luci-lib-docker=y/' .config
     sed -i 's/.*CONFIG_PACKAGE_luci-app-docker.*/CONFIG_PACKAGE_luci-app-docker=y/' .config
     sed -i 's/.*CONFIG_PACKAGE_luci-app-dockerman.*/CONFIG_PACKAGE_luci-app-dockerman=y/' .config
+    # iptables-nft 必须 =y（Docker 依赖）
+    sed -i 's/.*CONFIG_PACKAGE_iptables-nft.*/CONFIG_PACKAGE_iptables-nft=y/' .config
+    sed -i 's/.*CONFIG_PACKAGE_ip6tables-nft.*/CONFIG_PACKAGE_ip6tables-nft=y/' .config
 else
     echo "Disabling Docker packages..."
     sed -i 's/.*CONFIG_PACKAGE_dockerd.*/# CONFIG_PACKAGE_dockerd is not set/' .config

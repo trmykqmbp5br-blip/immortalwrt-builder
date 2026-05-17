@@ -1,0 +1,82 @@
+UI 插件 smartdns_ui.so 没安装
+
+软件源现在是 mirrors.vsean.net，应该用中科大 USTC 镜像
+
+32位支持的文件在/files/lib32/ 里都存在，但没映射到 /lib32/
+
+
+
+ 你的 immortalwrt-builder 项目有 3 个配置问题导致 Docker 起不来：
+
+  问题 1（核心）：iptables-nft 没编入固件
+
+  .config 中：
+  CONFIG_PACKAGE_iptables-nft=m   ← 只编译 .ipk，不嵌入 squashfs
+  CONFIG_PACKAGE_ip6tables-nft=m  ← 同上
+
+  在 OpenWrt 里 =m 表示"编译但不打包进固件"。所以刷机后系统里没有 iptables 命令，Docker 启动时直接挂：
+
+  failed to create NAT chain DOCKER: iptables not found
+
+  修复：scripts/docker-toggle.sh 里要加这两行：
+
+  sed -i 's/.*CONFIG_PACKAGE_iptables-nft.*/CONFIG_PACKAGE_iptables-nft=y/' .config
+  sed -i 's/.*CONFIG_PACKAGE_ip6tables-nft.*/CONFIG_PACKAGE_ip6tables-nft=y/' .config
+
+  问题 2：overlay2 存储驱动无法工作
+
+  固件类型是 squashfs（CONFIG_TARGET_ROOTFS_SQUASHFS=y），根文件系统是 overlayfs 叠加。Docker 的 overlay2 驱动不能在
+  overlayfs 上再叠 overlay。所以报：
+
+  overlay: filesystem on /opt/docker/.../upper not supported as upperdir
+
+  修复：在 files/etc/docker/daemon.json 预配置 Docker 数据目录到 f2fs 分区：
+
+  {
+    "storage-driver": "overlay2",
+    "data-root": "/overlay/docker"
+  }
+
+  （/overlay 是底层 f2fs，不是 overlayfs，overlay2 可以正常工作）
+
+  问题 3：Release 删掉了 packages 目录
+
+  cd /workdir/openwrt/bin/targets/*/*
+  rm -rf packages   ← 这一行
+
+  即使 iptables-nft=m 编出了 .ipk，也被删掉了，刷机后想 opkg install 都没包可用。
+
+  修复：保留 packages 目录，或至少把缺失的包写入 release notes。
+
+  ---
+  还有个小问题
+
+  CONFIG_PACKAGE_fuse-overlayfs 也没开，不过用上面问题 2 的方案（data-root 指向 /overlay/docker）就不需要它了。
+
+  总结
+
+  ┌─────┬────────────────────────┬───────────────────────────────────┬─────────────────────────────────┐
+  │  #  │          问题          │               文件                │              修复               │
+  ├─────┼────────────────────────┼───────────────────────────────────┼─────────────────────────────────┤
+  │ 1   │ iptables-nft=m 不是 =y │ scripts/docker-toggle.sh          │ 加 sed 设为 =y                  │
+  ├─────┼────────────────────────┼───────────────────────────────────┼─────────────────────────────────┤
+  │ 2   │ 无 Docker daemon 配置  │ 新建 files/etc/docker/daemon.json │ 配 data-root 到 /overlay/docker │
+  ├─────┼────────────────────────┼───────────────────────────────────┼─────────────────────────────────┤
+  │ 3   │ Release 删了 packages  │ .github/workflows/build.yml       │ 去掉 rm -rf packages  
+
+
+以下为内核缺乏，刷机时的内核编译配置和官方发布的内核不一致，导致所有 kmod 相关的包都装不了,需补充：
+ 内核模块 (kmod-*)            │ 57 个 │ 无对应 kmods 仓库，手动下 ABI 不兼容 │
+  ├──────────────────────────────┼───────┼──────────────────────────────────────┤
+  │ iptables 体系                │ 15 个 │ 依赖上述 kmod                        │
+  ├──────────────────────────────┼───────┼──────────────────────────────────────┤
+  │ mwan3                        │ —     │ 依赖 iptables                        │
+  ├──────────────────────────────┼───────┼──────────────────────────────────────┤
+   ├──────────────────────────────┼───────┼──────────────────────────────────────┤
+  │ sing-box / openclash / v2dat │ 3 个  │ 需要 kmod-tun + kmod-netlink-diag    │
+  ├──────────────────────────────┼───────┼──────────────────────────────────────┤
+  │ luci-app-diskman             │ 2 个  │ 需要 kmod-fs-*                       │
+  ├──────────────────────────────┼───────┼──────────────────────────────────────┤
+  │ dockerd                      │ 1 个  │ 需要 iptables + overlay 支持         │
+  ├──────────────────────────────┼───────┼──────────────────────────────────────┤
+  │ QEMU 虚拟化                  │ 8 个  │ 依赖 kmod-kvm-* 

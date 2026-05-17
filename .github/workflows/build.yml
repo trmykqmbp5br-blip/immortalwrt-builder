@@ -219,7 +219,6 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         cd /workdir/openwrt/bin/targets/*/*
-        rm -rf packages
         FACTORY=$(ls ./*squashfs-combined-efi.img.gz)
         TAG="immortalwrt-24.10.6-${{ github.run_number }}"
         cp "$FACTORY" "/tmp/${TAG}--刷机.img.gz"
