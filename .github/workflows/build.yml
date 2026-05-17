@@ -195,6 +195,19 @@ jobs:
         path: /workdir/openwrt/dl
         key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
 
+    # ============= 清理旧 dl 缓存 =============
+    - name: Clean old dl caches
+      if: always()
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        PREFIX="dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-"
+        gh cache list --json id,key,createdAt --jq ".[] | select(.key | startswith(\"$PREFIX\")) | {id,key,createdAt}" \
+          | jq -s 'sort_by(.createdAt) | reverse | .[2:][] | .id' \
+          | while read id; do
+              gh cache delete "$id" && echo "deleted $id"
+            done
+
     # ============= 2. 保存 ccache =============
     - name: Save ccache
       continue-on-error: true
