@@ -145,3 +145,31 @@ EOF
 
 patch_docker_support "target/linux/x86/config-6.6"
 patch_docker_support "target/linux/x86/64/config-6.6"
+
+# 确保 netfilter 内核模块编译为 =y（内置），防止被 olddefconfig 关掉
+for KERNEL_CONFIG in target/linux/x86/config-6.6 target/linux/x86/64/config-6.6; do
+    [ -f "$KERNEL_CONFIG" ] || continue
+    for opt in \
+        CONFIG_IP_NF_FILTER \
+        CONFIG_IP_NF_NAT \
+        CONFIG_IP6_NF_NAT \
+        CONFIG_NETFILTER_XT_NAT \
+        CONFIG_NETFILTER_XT_TARGET_MASQUERADE \
+        CONFIG_NF_CONNTRACK_IPV4 \
+        CONFIG_NF_CONNTRACK_IPV6 \
+        CONFIG_IP_NF_MATCH_IPOPT
+    do
+        if grep -q "^$opt=m" "$KERNEL_CONFIG" 2>/dev/null; then
+            sed -i "s/^$opt=m/$opt=y/" "$KERNEL_CONFIG"
+            echo "  $opt changed m→y ($KERNEL_CONFIG)"
+        elif grep -q "^$opt=y" "$KERNEL_CONFIG" 2>/dev/null; then
+            : # already y
+        elif grep -q "^# $opt is not set$" "$KERNEL_CONFIG" 2>/dev/null; then
+            sed -i "s/^# $opt is not set\$/$opt=y/" "$KERNEL_CONFIG"
+            echo "  $opt unset→y ($KERNEL_CONFIG)"
+        else
+            echo "$opt=y" >> "$KERNEL_CONFIG"
+            echo "  $opt=y added ($KERNEL_CONFIG)"
+        fi
+    done
+done
