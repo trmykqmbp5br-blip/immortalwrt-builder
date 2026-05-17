@@ -203,10 +203,10 @@ jobs:
           | jq -s 'sort_by(.createdAt) | reverse' > /tmp/dl_caches.json
         TOTAL=$(jq '[.[].sizeInBytes] | add // 0' /tmp/dl_caches.json)
         echo "dl caches total: $(numfmt --to=iec $TOTAL)"
-        if [ "$TOTAL" -gt 2147483648 ]; then
-          echo "over 2G, deleting oldest..."
+        if [ "${TOTAL:-0}" -gt 0 ] 2>/dev/null; then
+          echo "deleting oldest dl cache (keep newest)..."
           jq -r '.[:-1][] | .id' /tmp/dl_caches.json | while read id; do
-            gh cache delete --confirm "$id" && echo "  deleted $id"
+            gh cache delete --confirm "$id" && echo "  deleted $id" || echo "  delete $id failed"
           done
         fi
 
@@ -229,10 +229,10 @@ jobs:
           | jq -s 'sort_by(.createdAt) | reverse' > /tmp/ccache_caches.json
         TOTAL=$(jq '[.[].sizeInBytes] | add // 0' /tmp/ccache_caches.json)
         echo "ccache caches total: $(numfmt --to=iec $TOTAL)"
-        if [ "$TOTAL" -gt 2147483648 ]; then
-          echo "over 2G, deleting oldest..."
+        if [ "${TOTAL:-0}" -gt 0 ] 2>/dev/null; then
+          echo "deleting oldest ccache (keep newest)..."
           jq -r '.[:-1][] | .id' /tmp/ccache_caches.json | while read id; do
-            gh cache delete --confirm "$id" && echo "  deleted $id"
+            gh cache delete --confirm "$id" && echo "  deleted $id" || echo "  delete $id failed"
           done
         fi
 
