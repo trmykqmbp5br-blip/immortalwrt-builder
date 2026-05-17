@@ -187,14 +187,7 @@ jobs:
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
     # ============= 2. 保存 dl 缓存（编译成功后才存） =============
-    - name: Save dl cache
-      if: steps.compile.outcome == 'success' && !cancelled()
-      uses: actions/cache/save@v5
-      with:
-        path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
-
-    # ============= 清理 dl 缓存（超 2G 删最旧，仅编译成功时清理） =============
+    # ============= 清理 dl 缓存（超 2G 删最旧，先删后存防误伤） =============
     - name: Clean old dl caches
       if: success()
       env:
@@ -213,16 +206,14 @@ jobs:
           done
         fi
 
-    # ============= 2. 保存 ccache =============
-    - name: Save ccache
-      continue-on-error: true
+    - name: Save dl cache
       if: steps.compile.outcome == 'success' && !cancelled()
       uses: actions/cache/save@v5
       with:
-        path: ~/.ccache
-        key: ccache-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-${{ github.run_id }}
+        path: /workdir/openwrt/dl
+        key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
 
-    # ============= 清理 ccache 缓存（超 2G 删最旧，仅编译成功时清理） =============
+    # ============= 清理 ccache 缓存（超 2G 删最旧，先删后存防误伤） =============
     - name: Clean old ccache caches
       if: success()
       env:
@@ -240,6 +231,14 @@ jobs:
             gh cache delete "$id" && echo "  deleted $id"
           done
         fi
+
+    - name: Save ccache
+      continue-on-error: true
+      if: steps.compile.outcome == 'success' && !cancelled()
+      uses: actions/cache/save@v5
+      with:
+        path: ~/.ccache
+        key: ccache-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}-${{ github.run_id }}
 
     # ============= 保存 toolchain 缓存 =============
     - name: Save toolchain cache
