@@ -251,7 +251,7 @@ jobs:
           /workdir/openwrt/staging_dir/tool*
         key: toolchain-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}
 
-    - name: Release firmware
+    - name: 固件地址
       if: env.UPLOAD_RELEASE == 'true' && success()
       env:
         GH_TOKEN: ${{ github.token }}
