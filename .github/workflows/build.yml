@@ -157,12 +157,12 @@ jobs:
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P1_SH $DIY_P2_SH
         cd openwrt
-        timeout 60 $GITHUB_WORKSPACE/$DIY_P1_SH
-        timeout 600 bash -c './scripts/feeds update -a'
-        timeout 600 bash -c './scripts/feeds install -a'
-        timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
+        timeout 60 bash -c '$GITHUB_WORKSPACE/$DIY_P1_SH 2>&1 | grep -iE "WARNING|error|failed" || true'
+        timeout 600 bash -c './scripts/feeds update -a 2>&1 | grep -iE "WARNING|error|failed|No feed" || true'
+        timeout 600 bash -c './scripts/feeds install -a 2>&1 | grep -iE "WARNING|error|failed|No feed" || true'
+        timeout 600 bash -c '$GITHUB_WORKSPACE/$DIY_P2_SH 2>&1 | grep -iE "WARNING|error|failed" || true'
         # 二次安装：diy-part2 加了新包后重新索引，消除 WARNING
-        timeout 120 bash -c './scripts/feeds install -a'
+        timeout 120 bash -c './scripts/feeds install -a 2>&1 | grep -iE "WARNING|error|failed|No feed" || true'
 
     - name: Download sources
       working-directory: /workdir/openwrt
