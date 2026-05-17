@@ -10,3 +10,6 @@ echo "src-git small https://github.com/kenzok8/small.git;master" >> feeds.conf.d
 
 # sirpdboy: 高级设置、分区扩容、酷猫主题等
 # echo "src-git sirpdboy https://github.com/sirpdboy/sirpdboy-package.git;main" >> feeds.conf.default
+
+# animegasan: luci-app-alpha-config (luci-theme-alpha 依赖)
+echo "src-git animegasan https://github.com/animegasan/luci-app-alpha-config.git;master" >> feeds.conf.default
