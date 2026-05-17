@@ -154,6 +154,40 @@ cp glibc32.tar.gz runtime/
 - GitHub Actions 自动保留最近 3 个 Release
 - 使用 LLVM/Clang 构建（部分组件）
 
+## 添加第三方包
+
+### 最简场景（包已在 kenzo/small feed 中）
+
+只改 `shell/custom-packages.sh`，去注释即启用：
+
+```bash
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-xxx"
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-xxx-zh-cn"
+```
+
+减号前缀排除 feed 默认选中但你不想要的包：
+
+```bash
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES -luci-app-xxx"
+```
+
+### 添加新 feed
+
+改两个文件：`diy-part1.sh`（加 feed 源）+ `shell/custom-packages.sh`（加包名）。
+
+### 添加 istore 类二进制包
+
+`shell/custom-packages.sh` 中加 `luci-app-store`，确保 workflow 已勾选 `include_store`。
+
+### 已知的坑
+
+| 问题 | 说明 |
+|------|------|
+| fchomo 递归依赖 | Makefile 自引用 `depends on PACKAGE_luci-app-fchomo`，需在 `.config` 禁用 + patch Makefile |
+| kmod =m | 第三方 feed 可能把 kmod 设成 `=m`，diy-part2.sh 末尾已做全局 `=m→=y` 校验 |
+| 跨 feed 依赖 | kenzo 里部分包依赖 small 中的库，两个 feed 缺一不可 |
+| 包冲突 | 如 advancedplus 与 argon-config 功能重叠，用 `-` 前缀排除 |
+
 ## 文件结构
 
 ```
