@@ -46,6 +46,8 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-alpha luci-app-alpha-config"
 # ==================== 网络服务 ====================
 # SmartDNS (DNS 防污染/缓存/分流)
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn"
+# mwan3 多 WAN 负载均衡
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES mwan3 luci-app-mwan3 luci-i18n-mwan3-zh-cn"
 # MosDNS (SmartDNS 替代方案)
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-mosdns luci-i18n-mosdns-zh-cn"
 # AdGuard Home
