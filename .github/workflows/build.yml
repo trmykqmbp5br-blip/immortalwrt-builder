@@ -202,7 +202,7 @@ jobs:
         if [ "$TOTAL" -gt 2147483648 ]; then
           echo "over 2G, deleting oldest..."
           jq -r '.[:-1][] | .id' /tmp/dl_caches.json | while read id; do
-            gh cache delete "$id" && echo "  deleted $id"
+            gh cache delete --confirm "$id" && echo "  deleted $id"
           done
         fi
 
@@ -228,7 +228,7 @@ jobs:
         if [ "$TOTAL" -gt 2147483648 ]; then
           echo "over 2G, deleting oldest..."
           jq -r '.[:-1][] | .id' /tmp/ccache_caches.json | while read id; do
-            gh cache delete "$id" && echo "  deleted $id"
+            gh cache delete --confirm "$id" && echo "  deleted $id"
           done
         fi
 
