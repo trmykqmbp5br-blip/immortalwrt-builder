@@ -42,7 +42,9 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-upnp-zh-cn"
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
 
 # ==================== 网络服务 ====================
-# MosDNS (替代 SmartDNS)
+# SmartDNS (DNS 防污染/缓存/分流)
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES smartdns luci-app-smartdns luci-i18n-smartdns-zh-cn"
+# MosDNS (SmartDNS 替代方案)
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-mosdns luci-i18n-mosdns-zh-cn"
 # AdGuard Home
 #CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-app-adguardhome"
