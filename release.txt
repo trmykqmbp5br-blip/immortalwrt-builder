@@ -11,7 +11,7 @@ ImmortalWrt 24.10.6 x86_64 自动构建固件
 
 固件文件说明:
  - *squashfs-combined-efi.img.gz — factory 刷机包（第一次刷写用）
- - *squashfs-sysupgrade.bin — 在线升级包（Web/命令行升级用）
+ - *squashfs-sysupgrade.bin — 在线升级包（如存在，Web/命令行升级用）
 
 刷写方式:
  1. 第一次刷写: 使用 combined-efi.img.gz（解压后用写盘工具写入）

@@ -170,14 +170,6 @@ jobs:
         echo "=== 下载后 ==="
         df -hT .
 
-    # ============= 2. 保存 dl 缓存 =============
-    - name: Save dl cache
-      if: steps.compile.outcome == 'success' && !cancelled()
-      uses: actions/cache/save@v5
-      with:
-        path: /workdir/openwrt/dl
-        key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
-
     - name: Compile the firmware
       id: compile
       working-directory: /workdir/openwrt
@@ -192,6 +184,14 @@ jobs:
         grep '^CONFIG_TARGET_DEVICE_.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    # ============= 2. 保存 dl 缓存（编译成功后才存） =============
+    - name: Save dl cache
+      if: steps.compile.outcome == 'success' && !cancelled()
+      uses: actions/cache/save@v5
+      with:
+        path: /workdir/openwrt/dl
+        key: dl-${{ env.REPO_BRANCH }}-${{ env.INCLUDE_DOCKER }}-${{ github.run_id }}
 
     # ============= 2. 保存 ccache =============
     - name: Save ccache
@@ -221,16 +221,19 @@ jobs:
         cd /workdir/openwrt/bin/targets/*/*
         rm -rf packages
         FACTORY=$(ls ./*squashfs-combined-efi.img.gz)
-        SYSupgrade=$(ls ./*squashfs-sysupgrade.bin)
         TAG="immortalwrt-24.10.6-${{ github.run_number }}"
         cp "$FACTORY" "/tmp/${TAG}--刷机.img.gz"
-        cp "$SYSupgrade" "/tmp/${TAG}--在线升级.bin"
+        RELEASE_FILES="/tmp/${TAG}--刷机.img.gz"
+        SYSupgrade=$(ls ./*squashfs-sysupgrade.bin 2>/dev/null || true)
+        if [ -n "$SYSupgrade" ]; then
+          cp "$SYSupgrade" "/tmp/${TAG}--在线升级.bin"
+          RELEASE_FILES="$RELEASE_FILES /tmp/${TAG}--在线升级.bin"
+        fi
         gh release create "$TAG" \
           --repo ${{ github.repository }} \
           --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
           --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          "/tmp/${TAG}--刷机.img.gz" \
-          "/tmp/${TAG}--在线升级.bin"
+          $RELEASE_FILES
         echo "=== 清理旧 Release ==="
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +4 \
