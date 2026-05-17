@@ -20,6 +20,10 @@ permissions:
   contents: write
   actions: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   INCLUDE_DOCKER: ${{ github.event.inputs.include_docker }}
   REPO_URL: https://github.com/immortalwrt/immortalwrt
