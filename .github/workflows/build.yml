@@ -261,11 +261,18 @@ jobs:
         FACTORY=$(ls ./*squashfs-combined-efi.img.gz)
         TAG="immortalwrt-24.10.6-${{ github.run_number }}"
         cp "$FACTORY" "/tmp/${TAG}-shuaji.img.gz"
+        RELEASE_FILES="/tmp/${TAG}-shuaji.img.gz"
+        SYSupgrade=$(ls ./*squashfs-sysupgrade.* 2>/dev/null || true)
+        if [ -n "$SYSupgrade" ]; then
+          SUFFIX="${SYSupgrade#*squashfs-sysupgrade}"
+          cp "$SYSupgrade" "/tmp/${TAG}-zaixian${SUFFIX}"
+          RELEASE_FILES="$RELEASE_FILES /tmp/${TAG}-zaixian${SUFFIX}"
+        fi
         gh release create "$TAG" \
           --repo ${{ github.repository }} \
           --title "ImmortalWrt 24.10.6-${{ github.run_number }}" \
           --notes-file "$GITHUB_WORKSPACE/release.txt" \
-          "/tmp/${TAG}-shuaji.img.gz"
+          $RELEASE_FILES
         echo "=== 清理旧 Release ==="
         gh release list --limit 100 --json tagName --jq '.[].tagName' \
           | tail -n +4 \
