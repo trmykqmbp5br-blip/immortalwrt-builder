@@ -161,6 +161,8 @@ jobs:
         timeout 600 bash -c './scripts/feeds update -a'
         timeout 600 bash -c './scripts/feeds install -a'
         timeout 600 $GITHUB_WORKSPACE/$DIY_P2_SH
+        # 二次安装：diy-part2 加了新包后重新索引，消除 WARNING
+        timeout 120 bash -c './scripts/feeds install -a'
 
     - name: Download sources
       working-directory: /workdir/openwrt

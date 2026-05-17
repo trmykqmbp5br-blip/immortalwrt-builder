@@ -41,7 +41,7 @@ CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-i18n-upnp-zh-cn"
 # Argon 主题 + 配置
 CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn"
 # Alpha 主题 + 配置
-CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-alpha luci-app-alpha-config"
+CUSTOM_PACKAGES="$CUSTOM_PACKAGES luci-theme-alpha"
 
 # ==================== 网络服务 ====================
 # SmartDNS (DNS 防污染/缓存/分流)

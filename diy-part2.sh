@@ -17,6 +17,11 @@ for makefile in package/feeds/*/*/luci-app-fchomo/Makefile; do
     [ -f "$makefile" ] && sed -i 's/depends on.*PACKAGE_luci-app-fchomo/depends on +PACKAGE_luci-app-fchomo/' "$makefile" && \
         echo "  Fixed fchomo recursive dependency in $makefile"
 done
+# 3. luci-theme-alpha: 去掉对不存在的 luci-app-alpha-config 的依赖
+for makefile in package/feeds/kenzo/luci-theme-alpha/Makefile; do
+    [ -f "$makefile" ] && sed -i '/luci-app-alpha-config/d' "$makefile" && \
+        echo "  Fixed luci-theme-alpha: removed non-existent luci-app-alpha-config dependency"
+done
 
 # ============= 0. ccache 配置 =============
 echo "Enabling ccache and setting CONFIG_CCACHE_DIR..."
