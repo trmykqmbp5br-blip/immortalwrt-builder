@@ -161,8 +161,6 @@ jobs:
         timeout 600 bash -c './scripts/feeds update -a 2>&1 | grep -iE "WARNING|error|failed|No feed" || true'
         timeout 600 bash -c './scripts/feeds install -a 2>&1 | grep -iE "WARNING|error|failed|No feed" || true'
         timeout 600 bash -c '$GITHUB_WORKSPACE/$DIY_P2_SH 2>&1 | grep -iE "WARNING|error|failed" || true'
-        # 二次安装：diy-part2 加了新包后重新索引，消除 WARNING
-        timeout 120 bash -c './scripts/feeds install -a 2>&1 | grep -iE "WARNING|error|failed|No feed" || true'
 
     - name: Download sources
       working-directory: /workdir/openwrt
