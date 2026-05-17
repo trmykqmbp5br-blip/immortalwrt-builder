@@ -31,6 +31,8 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
+  CCACHE_DIR: /home/runner/.ccache
+  CCACHE_MAXSIZE: 2G
 
 jobs:
   build:
@@ -196,7 +198,7 @@ jobs:
     # ============= 2. 保存 ccache =============
     - name: Save ccache
       continue-on-error: true
-      if: steps.compile.outcome == 'success' && steps.restore-toolchain.outputs.cache-hit != 'true'
+      if: steps.compile.outcome == 'success' && !cancelled()
       uses: actions/cache/save@v5
       with:
         path: ~/.ccache
@@ -213,7 +215,7 @@ jobs:
           /workdir/openwrt/staging_dir/tool*
         key: toolchain-${{ env.REPO_BRANCH }}-${{ env.TOOLCHAIN_HASH }}
 
-    - name: Organize & Release
+    - name: 固件地址
       if: env.UPLOAD_RELEASE == 'true' && success()
       env:
         GH_TOKEN: ${{ github.token }}
@@ -221,8 +223,8 @@ jobs:
         cd /workdir/openwrt/bin/targets/*/*
         FACTORY=$(ls ./*squashfs-combined-efi.img.gz)
         TAG="immortalwrt-24.10.6-${{ github.run_number }}"
-        cp "$FACTORY" "/tmp/${TAG}--刷机.img.gz"
-        RELEASE_FILES="/tmp/${TAG}--刷机.img.gz"
+        cp "$FACTORY" "/tmp/${TAG}--固件地址.img.gz"
+        RELEASE_FILES="/tmp/${TAG}--固件地址.img.gz"
         SYSupgrade=$(ls ./*squashfs-sysupgrade.bin 2>/dev/null || true)
         if [ -n "$SYSupgrade" ]; then
           cp "$SYSupgrade" "/tmp/${TAG}--在线升级.bin"
