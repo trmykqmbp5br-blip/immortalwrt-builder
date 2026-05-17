@@ -11,6 +11,10 @@ if [ "${INCLUDE_DOCKER:-yes}" = "yes" ]; then
     sed -i 's/.*CONFIG_PACKAGE_luci-lib-docker.*/CONFIG_PACKAGE_luci-lib-docker=y/' .config
     sed -i 's/.*CONFIG_PACKAGE_luci-app-docker.*/CONFIG_PACKAGE_luci-app-docker=y/' .config
     sed -i 's/.*CONFIG_PACKAGE_luci-app-dockerman.*/CONFIG_PACKAGE_luci-app-dockerman=y/' .config
+    # containerd/runc/tini: dockerd 依赖
+    sed -i 's/.*CONFIG_PACKAGE_containerd.*/CONFIG_PACKAGE_containerd=y/' .config
+    sed -i 's/.*CONFIG_PACKAGE_runc.*/CONFIG_PACKAGE_runc=y/' .config
+    sed -i 's/.*CONFIG_PACKAGE_tini.*/CONFIG_PACKAGE_tini=y/' .config
     # iptables-nft 必须 =y（Docker 依赖）
     sed -i 's/.*CONFIG_PACKAGE_iptables-nft.*/CONFIG_PACKAGE_iptables-nft=y/' .config
     sed -i 's/.*CONFIG_PACKAGE_ip6tables-nft.*/CONFIG_PACKAGE_ip6tables-nft=y/' .config
